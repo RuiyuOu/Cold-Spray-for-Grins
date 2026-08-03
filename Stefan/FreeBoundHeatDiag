@@ -1,0 +1,206 @@
+// We consider the Stefan problem for water and ice.
+
+// This default problem has been set up to initially freeze, 
+// then turn into melting. 
+
+// The domain will be bisected by an interface where T=0
+// Where on the left shall be ice, and the right shall be water.
+
+// Both sides will satisfy the heat equation in their domain,
+// with the appropriate boundary condition of my choosing.
+// The left wall will be held at T=-1, the right wall will be held at T=1. 
+// We enforce no heat loss on the outside boundary, so DoutT = 0
+
+// The interface will satisfy the equation:
+// LV = kwaterDnTwater - kiceDnTice
+// Where Dn is the normal derivative out from the ice region. 
+// L is the latent heat of melting
+
+// CGS units are used here
+
+load "iovtk"
+string outdir = "C:\\ColdSprayCode\\Stefan\\results\\";
+string filenum;
+
+// Time and time steps
+real T=50;
+real dt=0.1;
+
+// Material properties
+real kice = 1.335E-2; // 1.335E-2 cm^2/s
+real kwater = 1.4E-3; // 1.4E-3 cm^2/s
+real L = (334E-2); // 334E9 cm^2/s^2 
+// Number is reduced to make melting faster. 
+
+// Domain labeling
+int left = 1;
+int right = 2;
+int top = 3;
+int bottom = 4;
+int diag  = 5;
+
+// sigmoid smoothness
+real k = 10;
+
+// sigmoid jump parameters
+real sig0 = 1.0/(1+exp(-k*(0.0-0.5)));  // sigma at t=0
+real sig1 = 1.0/(1+exp(-k*(1.0-0.5)));  // sigma at t=1
+
+// Main square domain
+border S1(t=0,1){ x=t;   y=0;   label=bottom; }
+border S2(t=0,1){ x=1;   y=t;   label=right; }
+border S3(t=0,1){ x=1-t; y=1;   label=top; }
+border S4(t=0,1){ x=0;   y=1-t; label=left; }
+
+
+// Diagonal that separates ice and water. Choose from half&half, linear, or a sigmoid in x. 
+
+// Straight down the middle
+//border D1(t=0,1){ x=0.5; y=1-t; label=diag; } 
+
+// Linear bound
+//border D1(t=0,1){ x=0.3+0.4*t; y=1-t; label=diag; } 
+
+//Smooth jump bound
+border D1(t=0,1){real sig = 1.0/(1+exp(-k*(t-0.5)));real s = (sig - sig0)/(sig1 - sig0);x=0.3+0.4*s; y=1-t; label=diag; } 
+
+// Build meshes
+int n = 10;
+
+// Left region (ice)
+mesh ThL = buildmesh(S1(n) + S2(n) + S3(n) + S4(n) + D1(n));
+
+// Isolate left region (ice): region containing point (0.1, 0.5)
+int regIce = ThL(0.1, 0.5).region;
+mesh ThIce   = trunc(ThL, region == regIce);
+mesh ThWater = trunc(ThL, region != regIce);
+mesh IceStart= ThIce;
+
+fespace ThI(ThIce, P2);
+ThI dxI,dyI, i1, i2;
+ThI iu, iuold, iv;
+
+fespace ThW(ThWater, P2);
+ThW dxW,dyW, w1, w2;
+ThW wu, wuold, wv;
+
+real theta = 0.5; // Crank-Nicholson
+
+problem HeatICN(iu, iv)
+    = int2d(ThIce)(
+          iu*iv/dt
+        + theta * kice * (
+              dx(iu)*dx(iv)
+            + dy(iu)*dy(iv)
+        )
+    )
+    - int2d(ThIce)(
+          iuold*iv/dt
+        - (1-theta) * kice *(
+              dx(iuold)*dx(iv)
+            + dy(iuold)*dy(iv)
+        )
+    )
+    //+ on(left, iu=-5)
+    + on(diag,  iu=0)
+    ;
+problem HeatWCN(wu, wv)
+    = int2d(ThWater)(
+          wu*wv/dt
+        + theta * kwater * (
+              dx(wu)*dx(wv)
+            + dy(wu)*dy(wv)
+        )
+    )
+    - int2d(ThWater)(
+          wuold*wv/dt
+        - (1-theta) * kwater *(
+              dx(wuold)*dx(wv)
+            + dy(wuold)*dy(wv)
+        )
+    )
+    + on(right, wu=5)
+    + on(diag,  wu=0)
+    ;
+
+// Move interface
+problem MoveIX(dxI, i1) =
+    int2d(ThIce)(dx(dxI)*dx(i1) + dy(dxI)*dy(i1))
+  + on(left, dxI = 0) 
+  + on(diag,  dxI = dt/L*(kice*dx(iu)*N.x-kwater*dx(wu)*N.x))
+  ;
+
+problem MoveIY(dyI, i2) =
+    int2d(ThIce)(dx(dyI)*dx(i2) + dy(dyI)*dy(i2))
+  + on(diag,  dyI = dt/L*(kice*dy(iu)*N.y-kwater*dy(wu)*N.y))
+  + on(top, dyI = 0) 
+  + on(bottom, dyI = 0)
+  ;
+
+problem MoveWX(dxW, w1) =
+    int2d(ThWater)(dx(dxW)*dx(w1) + dy(dxW)*dy(w1))
+  + on(right, dxW = 0)
+  + on(diag,  dxW = -dxI)
+  ;
+
+problem MoveWY(dyW, w2) =
+    int2d(ThWater)(dx(dyW)*dx(w2) + dy(dyW)*dy(w2))
+  + on(diag,  dyW = -dyI)
+  + on(top, dyW = 0) 
+  + on(bottom, dyW = 0)
+  ;
+// Initial temps
+iuold = -1;
+wuold = 1;
+real tol = 0.05;
+real f = T/dt;
+for(real j = 0; j < f; j+=1){
+    // 1. Solve heat problem in each region
+	HeatICN;
+	HeatWCN;
+	iuold = iu;
+	wuold = wu;
+    // 2. Compute interface displacement
+	MoveIX;
+	MoveIY;
+	MoveWX;
+	MoveWY;
+    // 3. Movemesh
+	ThIce = movemesh(ThIce, [x+dxI,y+dyI]);
+	ThWater = movemesh(ThWater, [x-dxW,y-dyW]);
+    // 4. Adaptmesh
+	ThIce = adaptmesh(ThIce, iu, err=tol);
+	ThWater = adaptmesh(ThWater, wu, err=tol);
+    // 5. Plot
+	mesh Mh=ThIce + ThWater;
+	fespace Vh(Mh,P1);
+	Vh U=iu+wu;
+	if(j%5==0){
+		//plot(U, value=1,fill=1);
+		//plot(Mh);
+		if 			(j<10) 	filenum	= "00" + j;
+		else if 	(j<100) filenum = "0" + j;
+		else 				filenum = j;
+
+        int[int] ord = [1];
+        savevtk(outdir + "temp_result_" + filenum + ".vtu", Mh,
+                U,
+                dataname = "Temp",
+                order = ord);
+        {
+        ofstream pvd(outdir + "stefan.pvd", append);
+        pvd << "  <DataSet timestep=\"" << f*j
+            << "\" file=\"result_" << filenum << ".vtu\"/>" << endl;
+        }
+	}
+}
+
+//plot(IceStart, cmm="ice start");
+
+//plot(ThIce, cmm="ice left");
+
+{
+ofstream pvd(outdir + "stefan.pvd", append);
+pvd << "</Collection>" << endl;
+pvd << "</VTKFile>"    << endl;
+}

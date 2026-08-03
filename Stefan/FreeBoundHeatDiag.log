@@ -1,0 +1,29 @@
+          min -0.00300461  max 5.12992e-36
+  -- Solve :
+          min -1.83177e-32  max 5
+  -- Solve :
+          min -0.000373156  max -1.22588e-35
+  -- Solve :
+          min -4.9473e-05  max -2.06293e-37
+  -- Solve :
+          min 1.82913e-35  max 0.000373156
+  -- Solve :
+          min 8.47056e-37  max 4.95507e-05
+  number of required edges : 0
+  -- adaptmesh statistics:  Nb triangles 73 , h  min 0.0686205 , h max 0.22065
+     area =  0.45908 , M area = 27.2595 , M area/( |Khat| nt) 0.862371
+     infiny-regularity:  min 0.518899  max 1.52127
+     anisomax  3.7955, beta max = 1.26799 min  0.949488
+  --  mesh:  Nb of Triangles =     73, Nb of Vertices 48
+  number of required edges : 0
+  -- adaptmesh statistics:  Nb triangles 34 , h  min 0.0992014 , h max 0.360213
+     area =  0.537 , M area = 12.7321 , M area/( |Khat| nt) 0.864809
+     infiny-regularity:  min 0.394975  max 1.68095
+     anisomax  3.58115, beta max = 1.34695 min  0.913206
+  --  mesh:  Nb of Triangles =     34, Nb of Vertices 26
+times: compile 0.163s, execution 10.091s,  mpirank:0
+ ######## unfreed pointers   104803 Nb pointer,   0Bytes  ,  mpirank 0, memory leak =0
+ CodeAlloc : nb ptr  4797,  size :574824 mpirank: 0
+ WARNING NUMBER bad SearchMethod cas in 2d: 88469 int 3d 0(essai d2: 0 3d: 0 )
+Ok: Normal End
+ try getConsole C:\ColdSprayCode\Stefan\FreeBoundHeatDiag
