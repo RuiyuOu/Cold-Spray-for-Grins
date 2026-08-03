@@ -19,7 +19,7 @@
 // CGS units are used here
 
 load "iovtk"
-string outdir = "C:\\ColdSprayCode\\Stefan\\results\\";
+string outdir = "..\\Stefan\\results\\";
 string filenum;
 
 // Time and time steps

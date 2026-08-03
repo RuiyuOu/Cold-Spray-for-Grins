@@ -21,9 +21,9 @@
      infiny-regularity:  min 0.394975  max 1.68095
      anisomax  3.58115, beta max = 1.34695 min  0.913206
   --  mesh:  Nb of Triangles =     34, Nb of Vertices 26
-times: compile 0.163s, execution 10.091s,  mpirank:0
+times: compile 0.301s, execution 22.162s,  mpirank:0
  ######## unfreed pointers   104803 Nb pointer,   0Bytes  ,  mpirank 0, memory leak =0
  CodeAlloc : nb ptr  4797,  size :574824 mpirank: 0
  WARNING NUMBER bad SearchMethod cas in 2d: 88469 int 3d 0(essai d2: 0 3d: 0 )
 Ok: Normal End
- try getConsole C:\ColdSprayCode\Stefan\FreeBoundHeatDiag
+ try getConsole C:\ColdSprayForGrins\Stefan\FreeBoundHeatDiag
