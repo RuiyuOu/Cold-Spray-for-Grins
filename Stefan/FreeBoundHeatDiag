@@ -67,7 +67,6 @@ border D1(t=0,1){real sig = 1.0/(1+exp(-k*(t-0.5)));real s = (sig - sig0)/(sig1 
 // Build meshes
 int n = 10;
 
-// Left region (ice)
 mesh ThL = buildmesh(S1(n) + S2(n) + S3(n) + S4(n) + D1(n));
 
 // Isolate left region (ice): region containing point (0.1, 0.5)
@@ -77,8 +76,8 @@ mesh ThWater = trunc(ThL, region != regIce);
 mesh IceStart= ThIce;
 
 fespace ThI(ThIce, P2);
-ThI dxI,dyI, i1, i2;
-ThI iu, iuold, iv;
+ThI dxI,dyI, i1, i2; // Mesh moving fespace
+ThI iu, iuold, iv; // temperature fespace
 
 fespace ThW(ThWater, P2);
 ThW dxW,dyW, w1, w2;
@@ -101,7 +100,6 @@ problem HeatICN(iu, iv)
             + dy(iuold)*dy(iv)
         )
     )
-    //+ on(left, iu=-5)
     + on(diag,  iu=0)
     ;
 problem HeatWCN(wu, wv)
@@ -195,9 +193,9 @@ for(real j = 0; j < f; j+=1){
 	}
 }
 
-//plot(IceStart, cmm="ice start");
+plot(IceStart, wait=1, cmm="ice start");
 
-//plot(ThIce, cmm="ice left");
+plot(ThIce, cmm="ice left");
 
 {
 ofstream pvd(outdir + "stefan.pvd", append);
