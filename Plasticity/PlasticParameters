@@ -1,0 +1,23 @@
+// Copper particle
+real rho  = 8960.;
+real E    = 124e9;
+real nu   = 0.34;
+real A    = 90e6;
+real B    = 292e6;
+real nJC  = 0.31;
+real C    = 0.025;
+real Tm   = 1356.;
+real Cp   = 385.;
+real chi  = 0.9;
+
+real T0    = 300.;
+real deps0 = 1.0;
+real vimp  = -500.;
+
+real mu     = E/(2.*(1.+nu));
+real lambda = E*nu/((1.+nu)*(1.-2.*nu));
+
+// Divergence
+macro div(v) (dx(v[0])+dy(v[1])) // 	
+// Strain vector
+macro eps(v) ([dx(v[0]),dy(v[1]),dy(v[0])+dx(v[1])]) //

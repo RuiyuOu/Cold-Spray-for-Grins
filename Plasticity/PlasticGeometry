@@ -1,0 +1,28 @@
+int left 	= 1;
+int bottom	= 2;
+int right 	= 3;
+int top		= 4;
+
+int nw = 20;
+int nl = 30;
+real scale = 25e-6; // 25 micrometers
+
+border S1(t=0,1){ x=0;   			y=scale*(1-2*t);   	label=left; 	}
+border S2(t=0,1){ x=scale*(3*t);   	y=scale*(-1);   	label=bottom; 	}
+border S3(t=0,1){ x=scale*(3); 		y=scale*(-1+2*t);   label=right; 	}
+border S4(t=0,1){ x=scale*(3-3*t);  y=scale*(1); 		label=top; 		}
+
+mesh Ph	= buildmesh(S1(nw)+S2(nl)+S3(nw)+S4(nl));
+
+// Taylor-Hood. Check sources to verify validity.
+// Quadratic vector space
+fespace Vh(Ph, [P2, P2]);
+// Linear scalar space
+fespace Sh(Ph, P1);
+
+Vh [ux, uy],  [vx, vy];
+Vh [uxo, uyo],[vxo,vyo];
+
+Sh epspeq, Temp, sigvm;
+Sh sxx, syy, sxy, sigY; 
+Sh depseq;

@@ -1,28 +1,26 @@
-load "iovtk"
-include "ContactGeometry"
-include "ContactElasticity"
+// Yes. This is currently just a copy of the elastic portion. 
+// The elastic portion is to compare with the plastic problem. 
+// The Johnson Cook model will be added later. I am tired now, and would like to take a break. 
 
-string outdir = "..//Contact//results//";
+load "iovtk"
+include "PlasticGeometry"
+include "PlasticParameters"
+
+string outdir = "..//Plasticity//results//";
 string filenum;
 
-real T 		= 10;
-real dt 	= 0.00334788;
+real T 		= 50e-9;
+real dt 	= scale*1.86862e-05;
 real steps 	= T/dt;
+real toler  = 1e-3; 
 
 // Beta Newark parameters
 real beta 	= 0.25;
 real gamma 	= 0.5;
 
-// Rayleigh dampening terms
-real AlphaM 	= 0.01;
-real AlphaK 	= 0.01;
-
-// Lame scaling term
-real muK = 3e-2;
-
 // Macros M and K as described in the PDF
-macro M(a) (a[0]*pvi+a[1]*pvj) //
-macro K(a) (lambda*(div(a)*div([pvi,pvj]))+2.*muK*mu*eps(a)'*eps([pvi,pvj])) // 
+macro M(a) (a[0]*vx+a[1]*vy) //
+macro K(a) (lambda*(div(a)*div([vx,vy]))+2.*mu*eps(a)'*eps([vx,vy])) // 
 
 // Beta Newmark constants
 real c0 = 1./(beta*dt*dt);
@@ -37,8 +35,8 @@ fespace P0h(Ph,P0);
 P0h h = hTriangle;
 real hmin = h[].min;
 cout << "Smallest element size (hTriangle): " << hmin << endl;
-real ps = sqrt(lambda+2*mu*muK);
-real ss = sqrt(mu*muK);
+real ps = sqrt((lambda+2*mu)/rho);
+real ss = sqrt(mu/rho);
 real pt = hmin/ps;
 real st = hmin/ss;
 cout << "Pressure wave speed: " << ps << endl;
@@ -46,12 +44,12 @@ cout << "Shear wave speed: " << ss << endl;
 cout << "Time step for pressure: " << pt << endl;
 cout << "Time step for shear: " << st << endl;
 
-fespace Vh(Ph,[P1,P1]);        
-Vh [un,vn]; 			// Old displacement
-Vh [uvn,vvn];			// Old velocity
-Vh [uan,van];			// Old acceleration
-Vh [vold,dvold];		// Dummy vars
-Vh [aold,daold];		
+fespace Kh(Ph,[P2,P2]);        
+Kh [un,vn]; 			// Old displacement
+Kh [uvn,vvn];			// Old velocity
+Kh [uan,van];			// Old acceleration
+Kh [vold,dvold];		// Dummy vars
+Kh [aold,daold];		
 
 // Waves 
 fespace Wh(Ph,P1);
@@ -60,10 +58,10 @@ Wh sw;
 
 // Initial conditions
 un[]  = 0;
-uvn[] = 0;
+[uvn,vvn] = [vimp,0];
 uan[] = 0;
 aold[]= 0;
-vold[]= 0;
+[vold,dvold]= [vimp,0];
 
 int[int] vtkorder = [1,1,1];
 
@@ -71,20 +69,15 @@ for (int n = 0; n < steps; n++)
 {
     real t  = (n+1)*dt;
 
-    problem BetaNewark([px,py],[pvi,pvj])
+    problem BetaNewark([ux,uy],[vx,vy])
         = int2d(Ph)(
-              	c0*M([px,py])+
-				AlphaM*c3*M([px,py])+
-				AlphaK*c3*K([px,py])+
-				K([px,py])
+              	c0*rho*M([ux,uy])+
+				K([ux,uy])
 			)
         - int2d(Ph)(
-				c0*M([un,vn]) + c1*M([uvn,vvn]) + c2*M([uan,van])+
-				AlphaM*(c3*M([un,vn]) + c4*M([uvn,vvn]) + c5*M([uan,van]))+
-				AlphaK*(c3*K([un,vn]) + c4*K([uvn,vvn]) + c5*K([uan,van]))+
-				g*pvj
+				c0*rho*M([un,vn]) + c1*rho*M([uvn,vvn]) + c2*rho*M([uan,van])
 			)
-        + on(bottom, py=0);
+        + on(left, ux=0);
 
     BetaNewark;
 	
@@ -92,7 +85,7 @@ for (int n = 0; n < steps; n++)
 
     // New acceleration from Newmark
     // uan = c0*(px - un) - c1*uvn - c2*aold
-    uan[] = px[];
+    uan[] = ux[];
     uan[] -= un[];
     uan[] *= c0;
     uan[] -= c1*uvn[];
@@ -100,35 +93,35 @@ for (int n = 0; n < steps; n++)
 
     // New velocity from Newark
 	// uvn = c3*(px - un) - c4*vold - c5*aold
-    uvn[] = px[];
+    uvn[] = ux[];
 	uvn[] -= un[];
 	uvn[] *= c3;
     uvn[] -= c4*vold[];
 	uvn[] -= c5*aold[];
 
-    un[] = px[];
+    un[] = ux[];
 	aold[] = uan[];
 	vold[] = uvn[];
 	
 	// Save data
 
 	// Block deformation
-	mesh PhDeformed = movemesh(Ph, [x+px, y+py]);
+	mesh PhDeformed = movemesh(Ph, [x+ux, y+uy]);
+	PhDeformed = adaptmesh(PhDeformed, ux, err=toler);
 	// Pressure and shear waves 
-	pw = dx(px)+dy(py);
-	sw = dy(px)-dx(py);
+	pw = dx(ux)+dy(uy);
+	sw = dy(ux)-dx(uy);
 
-	if (n%5==0){
+	if (n%3==0){
 		if 		(n < 10) 	filenum = "000"	+n;
 		else if (n < 100) 	filenum = "00"	+n;
 		else if (n < 1000)	filenum = "0"   +n;
 		else 				filenum = n;
 	
-    	savevtk(outdir+"betanewark"+filenum+".vtu", 
+    	savevtk(outdir+"Elastic"+filenum+".vtu", 
 				PhDeformed, 
-				[px,py], pw, sw, 
+				[ux,uy], pw, sw, 
 				dataname="displacement pressurewave shearwave",
 				order=vtkorder);
 	}
 }
-
