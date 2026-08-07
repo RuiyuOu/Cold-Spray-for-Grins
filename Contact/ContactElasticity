@@ -1,0 +1,30 @@
+// Linear Elasticity
+
+// Gravity
+real g = -9.8;
+
+// We will be assuming a density of 1kg/m^3
+real E 		= 1E3; 	// Young's modulus: kg/m/s^2
+real nu 	= 0.3;	// Poisson modulus: 1
+
+real lambda = E*nu/((1.+nu)*(1.-2.*nu)); 	// Lame parameter: Pa
+real mu 	= E/(2.*(1.+nu));				// Lame parameter: Pa
+
+// We vectorize all matrices wherever possible
+
+// Elastic tensor
+func Elas = [[2*mu+lambda,lambda, 0. ], [lambda,2*mu+lambda, 0. ],[ 0. , 0. , mu ]];
+// Divergence
+macro div(v) (dx(v[0])+dy(v[1])) // 	
+// Strain vector
+macro eps(v) ([dx(v[0]),dy(v[1]),dy(v[0])+dx(v[1])]) //
+// Strain first differential
+macro deps(v,dv) ([dx((dv)[0]),dy((dv)[1]),dy((dv)[0])+dx((dv)[1])]) //
+//Density energy for elastic bodies
+macro W2d1(v)  ((1./2.)*( eps(v)'* Elas *eps(v))) //
+// Density energy first differential
+macro dW2d1(v,dv)((1./2.)*( eps(v)'*Elas*deps(v,dv)) + (1./2.)*((deps(v,dv))'*Elas*eps(v))) //
+// Density energy second differential
+macro ddW2d1(v,dv,ddv)((1./2.)*( deps(v,ddv)'*Elas*deps(v,dv)) + (1./2.)*((deps(v,dv))'*Elas*deps(v,ddv))) //
+// Stress vector
+macro sigma(v) (Elas*eps(v)) //

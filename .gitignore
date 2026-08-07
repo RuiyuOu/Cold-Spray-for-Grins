@@ -21,6 +21,5 @@
 *.xdv
 *.tex
 
+# FreeFEM log files
 *.log
-
-Contact
