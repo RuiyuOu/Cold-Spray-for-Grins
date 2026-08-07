@@ -6,7 +6,7 @@ string outdir = "..//Contact//results//";
 string filenum;
 
 real T 		= 10;
-real dt 	= 0.01;
+real dt 	= 0.002;
 real steps 	= T/dt;
 
 // Beta Newark parameters
@@ -18,11 +18,11 @@ real AlphaM 	= 0.01;
 real AlphaK 	= 0.01;
 
 // Lame scaling term
-real lambdaK = 3e-2;
+real muK = 3e-2;
 
 // Macros M and K as described in the PDF
 macro M(a) (a[0]*pvi+a[1]*pvj) //
-macro K(a) (lambda*(div(a)*div([pvi,pvj]))+2.*lambdaK*mu*eps(a)'*eps([pvi,pvj])) // 
+macro K(a) (lambda*(div(a)*div([pvi,pvj]))+2.*muK*mu*eps(a)'*eps([pvi,pvj])) // 
 
 // Beta Newmark constants
 real c0 = 1./(beta*dt*dt);
@@ -32,6 +32,20 @@ real c3 = gamma/(beta*dt);
 real c4 = gamma/beta - 1.;
 real c5 = dt*(gamma/(2*beta) - 1.);
 
+// CFL information
+fespace P0h(Ph,P0);
+P0h h = hTriangle;
+real hmin = h[].min;
+cout << "Smallest element size (hTriangle): " << hmin << endl;
+real ps = sqrt(lambda+2*mu*muK);
+real ss = sqrt(mu*muK);
+real pt = hmin/ps;
+real st = hmin/ss;
+cout << "Pressure wave speed: " << ps << endl;
+cout << "Shear wave speed: " << ss << endl;
+cout << "Time step for pressure: " << pt << endl;
+cout << "Time step for shear: " << st << endl;
+
 fespace Vh(Ph,[P1,P1]);        
 Vh [un,vn]; 			// Old displacement
 Vh [uvn,vvn];			// Old velocity
@@ -39,12 +53,18 @@ Vh [uan,van];			// Old acceleration
 Vh [vold,dvold];		// Dummy vars
 Vh [aold,daold];		
 
+fespace Wh(Ph,P1);
+Wh pw;
+Wh sw;
+
 // Initial conditions
 un[]  = 0;
 uvn[] = 0;
 uan[] = 0;
 aold[]= 0;
 vold[]= 0;
+
+int[int] vtkorder = [1,1,1];
 
 for (int n = 0; n < steps; n++)
 {
@@ -58,11 +78,9 @@ for (int n = 0; n < steps; n++)
 				K([px,py])
 			)
         - int2d(Ph)(
-				c0*M([un,vn])+
-				c1*M([uvn,vvn])+
-				c2*M([uan,van])+
-				AlphaM*(c3*M([un,vn])+c4*M([uvn,vvn])+c5*M([uan,van]))+
-				AlphaK*(c3*K([un,vn])+c4*K([uvn,vvn])+c5*K([uan,van]))+
+				c0*M([un,vn]) + c1*M([uvn,vvn]) + c2*M([uan,van])+
+				AlphaM*(c3*M([un,vn]) + c4*M([uvn,vvn]) + c5*M([uan,van]))+
+				AlphaK*(c3*K([un,vn]) + c4*K([uvn,vvn]) + c5*K([uan,van]))+
 				g*pvj
 			)
         + on(bottom, py=0);
@@ -72,7 +90,7 @@ for (int n = 0; n < steps; n++)
 	// Update the fields
 
     // New acceleration from Newmark
-    // uan = c0*(px - un) - c1*uvn - (c2-1)*aold
+    // uan = c0*(px - un) - c1*uvn - c2*aold
     uan[] = px[];
     uan[] -= un[];
     uan[] *= c0;
@@ -80,7 +98,7 @@ for (int n = 0; n < steps; n++)
     uan[] -= c2*aold[];
 
     // New velocity from Newark
-	// uvn = c3*(px - un) - (c4-1)*vold - c5*aold
+	// uvn = c3*(px - un) - c4*vold - c5*aold
     uvn[] = px[];
 	uvn[] -= un[];
 	uvn[] *= c3;
@@ -92,12 +110,20 @@ for (int n = 0; n < steps; n++)
 	vold[] = uvn[];
 	
 	mesh PhDeformed = movemesh(Ph, [x+px, y+py]);
+	pw = dx(px)+dy(py);
+	sw = dy(px)-dx(py); 	
 
 	if (n%5==0){
-		if 		(n < 10) 	filenum = "00"	+n;
-		else if (n < 100) 	filenum = "0"	+n;
+		if 		(n < 10) 	filenum = "000"	+n;
+		else if (n < 100) 	filenum = "00"	+n;
+		else if (n < 1000)	filenum = "0"   +n;
 		else 				filenum = n;
 	
-    	savevtk(outdir+"betanewark"+filenum+".vtu", PhDeformed, [px,py], dataname="displacement");
+    	savevtk(outdir+"betanewark"+filenum+".vtu", 
+				PhDeformed, 
+				[px,py], pw, sw, 
+				dataname="displacement pressurewave shearwave",
+				order=vtkorder);
 	}
 }
+
