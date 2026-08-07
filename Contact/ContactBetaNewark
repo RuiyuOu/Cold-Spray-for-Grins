@@ -6,7 +6,7 @@ string outdir = "..//Contact//results//";
 string filenum;
 
 real T 		= 10;
-real dt 	= 0.002;
+real dt 	= 0.00334788;
 real steps 	= T/dt;
 
 // Beta Newark parameters
