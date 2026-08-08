@@ -1,4 +1,5 @@
 // Yes. This is currently just a copy of the elastic portion. 
+// Which is pretty much just a copy of the Contact elasticity portion. 
 // The elastic portion is to compare with the plastic problem. 
 // The Johnson Cook model will be added later. I am tired now, and would like to take a break. 
 
