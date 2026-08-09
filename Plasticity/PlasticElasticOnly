@@ -6,58 +6,17 @@ string outdir = "..//Plasticity//results//";
 string filenum;
 
 real T 		= 50e-9;
-real dt 	= scale*1.86862e-05;
-real steps 	= T/dt;
-real toler  = 1e-3; 
-
-// Beta Newark parameters
-real beta 	= 0.25;
-real gamma 	= 0.5;
-
-// Macros M and K as described in the PDF
-macro M(a) (a[0]*vx+a[1]*vy) //
-macro K(a) (lambda*(div(a)*div([vx,vy]))+2.*mu*eps(a)'*eps([vx,vy])) // 
-
-// Beta Newmark constants
-real c0 = 1./(beta*dt*dt);
-real c1 = 1./(beta*dt);
-real c2 = 1./(2.*beta) - 1.;
-real c3 = gamma/(beta*dt);
-real c4 = gamma/beta - 1.;
-real c5 = dt*(gamma/(2*beta) - 1.);
-
-// CFL information
-fespace P0h(Ph,P0);
-P0h h = hTriangle;
-real hmin = h[].min;
-cout << "Smallest element size (hTriangle): " << hmin << endl;
-real ps = sqrt((lambda+2*mu)/rho);
-real ss = sqrt(mu/rho);
-real pt = hmin/ps;
-real st = hmin/ss;
-cout << "Pressure wave speed: " << ps << endl;
-cout << "Shear wave speed: " << ss << endl;
-cout << "Time step for pressure: " << pt << endl;
-cout << "Time step for shear: " << st << endl;
-
-fespace Kh(Ph,[P2,P2]);        
-Kh [un,vn]; 			// Old displacement
-Kh [uvn,vvn];			// Old velocity
-Kh [uan,van];			// Old acceleration
-Kh [vold,dvold];		// Dummy vars
-Kh [aold,daold];		
-
-// Waves 
-fespace Wh(Ph,P1);
-Wh pw;
-Wh sw;
+real MinGridSize = h[].min;
+real dt 	= TimeStepSize(MinGridSize);
+real steps 	= T/dt;	
 
 // Initial conditions
-un[]  = 0;
-[uvn,vvn] = [vimp,0];
-uan[] = 0;
-aold[]= 0;
-[vold,dvold]= [vimp,0];
+xx[]  		= 0;
+xxo[] 		= 0;
+[vx,vy] 	= [vimp,0];
+[vxo,vyo]	= [vimp,0];
+ax[] 		= 0;
+axo[]		= 0;
 
 int[int] vtkorder = [1,1,1];
 
@@ -65,48 +24,48 @@ for (int n = 0; n < steps; n++)
 {
     real t  = (n+1)*dt;
 
-    problem BetaNewark([ux,uy],[vx,vy])
+    problem BetaNewark([xx,yy],[vi,vj])
         = int2d(Ph)(
-              	c0*rho*M([ux,uy])+
-				K([ux,uy])
+              	c0(dt)*rho*M([xx,yy])+
+				K([xx,yy])
 			)
         - int2d(Ph)(
-				c0*rho*M([un,vn]) + c1*rho*M([uvn,vvn]) + c2*rho*M([uan,van])
+				c0(dt)*rho*M([xxo,yyo]) + c1(dt)*rho*M([vxo,vyo]) + c2(dt)*rho*M([axo,ayo])
 			)
-        + on(left, ux=0);
+        + on(left, xx=0);
 
     BetaNewark;
 	
 	// Update the fields
 
     // New acceleration from Newmark
-    // uan = c0*(px - un) - c1*uvn - c2*aold
-    uan[] = ux[];
-    uan[] -= un[];
-    uan[] *= c0;
-    uan[] -= c1*uvn[];
-    uan[] -= c2*aold[];
+    // uan = c0*(x_i+1 - x_i) - c1*vxo - c2*axo
+    ax[] =  xx[];
+    ax[] -= xxo[];
+    ax[] *= c0(dt);
+    ax[] -= c1(dt)*vx[];
+    ax[] -= c2(dt)*axo[];
 
     // New velocity from Newark
-	// uvn = c3*(px - un) - c4*vold - c5*aold
-    uvn[] = ux[];
-	uvn[] -= un[];
-	uvn[] *= c3;
-    uvn[] -= c4*vold[];
-	uvn[] -= c5*aold[];
+	// uvn = c3*(x_i+1 - x_i) - c4*vxo - c5*axo
+    vx[] =  xx[];
+	vx[] -= xxo[];
+	vx[] *= c3(dt);
+    vx[] -= c4(dt)*vxo[];
+	vx[] -= c5(dt)*axo[];
 
-    un[] = ux[];
-	aold[] = uan[];
-	vold[] = uvn[];
+    xxo[] = xx[];
+	vxo[] = vx[];
+	axo[] = ax[];
+
 	
 	// Save data
 
 	// Block deformation
-	mesh PhDeformed = movemesh(Ph, [x+ux, y+uy]);
-	PhDeformed = adaptmesh(PhDeformed, ux, err=toler);
+	mesh PhDeformed = movemesh(Ph, [x+xx, y+yy]);
 	// Pressure and shear waves 
-	pw = dx(ux)+dy(uy);
-	sw = dy(ux)-dx(uy);
+	pw = dx(xx)+dy(yy);
+	sw = dy(xx)-dx(yy);
 
 	if (n%3==0){
 		if 		(n < 10) 	filenum = "000"	+n;
@@ -116,7 +75,7 @@ for (int n = 0; n < steps; n++)
 	
     	savevtk(outdir+"Elastic"+filenum+".vtu", 
 				PhDeformed, 
-				[ux,uy], pw, sw, 
+				[xx,yy], pw, sw, 
 				dataname="displacement pressurewave shearwave",
 				order=vtkorder);
 	}

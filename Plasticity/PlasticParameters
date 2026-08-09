@@ -1,23 +1,71 @@
 // Copper particle
 real rho  = 8960.;
-real E    = 124e9;
+real E    = 117e9;
 real nu   = 0.34;
 real A    = 90e6;
 real B    = 292e6;
 real nJC  = 0.31;
 real C    = 0.025;
+real m    = 1.09;
+real dEps0 = 1.0;
+
 real Tm   = 1356.;
 real Cp   = 385.;
 real chi  = 0.9;
 
 real T0    = 300.;
-real deps0 = 1.0;
+
 real vimp  = -500.;
 
+// Lame 
 real mu     = E/(2.*(1.+nu));
 real lambda = E*nu/((1.+nu)*(1.-2.*nu));
 
+// Beta Newark parameters
+real beta 	= 0.25;
+real gamma 	= 0.5;
+
+// Beta Newmark constants
+func real c0(real dt){return (1./(beta*dt*dt));}
+func real c1(real dt){return (1./(beta*dt));}
+func real c2(real dt){return (1./(2.*beta) - 1.);}
+func real c3(real dt){return (gamma/(beta*dt));}
+func real c4(real dt){return (gamma/beta - 1.);}
+func real c5(real dt){return (dt*(gamma/(2*beta) - 1.));}
+
+// Johnson-Cook
+func real SigmaY(real Eps, real dEps, real T){
+	real rateRatio  = max(dEps/dEps0, 1.0);
+  	real theta      = min((T-T0)/(Tm-T0), 1.0);
+  	real Hard	    = A + B*Eps^nJC;
+  	real Rate       = 1.0 + C*log(rateRatio);
+  	real Therm      = 1.0 - theta^m;
+  	return Hard*Rate*Therm;
+}
+
+// Elasticity tensor
+func Elas = [	[2*mu+lambda	, lambda		, 	0 ],
+				[lambda			, 2*mu+lambda	, 	0 ],
+				[0				,0				,	mu]	];
+
+// Wave speeds
+real ps = sqrt((lambda+2*mu)/rho);
+real ss = sqrt(mu/rho);
+
+// Time step size
+func real TimeStepSize(real GridSize){
+	return GridSize/ps;
+}
+
+// Macros M and K as described in the PDF
+macro M(a) (a[0]*vi+a[1]*vj) //
+macro K(a) (lambda*(div(a)*div([vi,vj]))+2.*mu*eps(a)'*eps([vi,vj])) // 
+// Deviatoric Stress
+macro Dev(a) () //
+// von Mises Stress
+macro SigmaVM(DeviatoricStress) () //
 // Divergence
 macro div(v) (dx(v[0])+dy(v[1])) // 	
 // Strain vector
 macro eps(v) ([dx(v[0]),dy(v[1]),dy(v[0])+dx(v[1])]) //
+

@@ -14,15 +14,30 @@ border S4(t=0,1){ x=scale*(3-3*t);  y=scale*(1); 		label=top; 		}
 
 mesh Ph	= buildmesh(S1(nw)+S2(nl)+S3(nw)+S4(nl));
 
-// Taylor-Hood. Check sources to verify validity.
+// Taylor-Hood
 // Quadratic vector space
 fespace Vh(Ph, [P2, P2]);
 // Linear scalar space
 fespace Sh(Ph, P1);
 
-Vh [ux, uy],  [vx, vy];
-Vh [uxo, uyo],[vxo,vyo];
+Vh [xx, yy]; 	// Displacement
+Vh [xxo,yyo]; 	// Old displacement
+Vh [vx, vy]; 	// Velocity
+Vh [vxo,vyo];	// Old velocity
+Vh [ax, ay];	// Acceleration
+Vh [axo,ayo];	// Old acceleration
+Vh [vi,	vj];	// Test functions
 
-Sh epspeq, Temp, sigvm;
-Sh sxx, syy, sxy, sigY; 
-Sh depseq;
+Sh PlEps, dPlEps; 		// Plastic strain, plastic strain rate
+Sh PlEpsEq, dPlEpsEq;	// Equivalent plastic strain, equivalent plastic strain rate
+Sh SigXX, SigYY, SigXY, SigZZ; 	// ii component of the stress tensor
+Sh SigY, SigVM; 		// Yield stress, von Mises stress
+Sh Temp;				// Temperature
+
+// Waves 
+fespace Wh(Ph,P1);
+Wh pw, sw; // Pressure wave, shear wave
+
+// CFL information
+fespace P0h(Ph,P0);
+P0h h = hTriangle;

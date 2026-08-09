@@ -5,10 +5,6 @@ include "ContactElasticity"
 string outdir = "..//Contact//results//";
 string filenum;
 
-real T 		= 10;
-real dt 	= 0.00334788;
-real steps 	= T/dt;
-
 // Beta Newark parameters
 real beta 	= 0.25;
 real gamma 	= 0.5;
@@ -19,18 +15,6 @@ real AlphaK 	= 0.01;
 
 // Lame scaling term
 real muK = 3e-2;
-
-// Macros M and K as described in the PDF
-macro M(a) (a[0]*pvi+a[1]*pvj) //
-macro K(a) (lambda*(div(a)*div([pvi,pvj]))+2.*muK*mu*eps(a)'*eps([pvi,pvj])) // 
-
-// Beta Newmark constants
-real c0 = 1./(beta*dt*dt);
-real c1 = 1./(beta*dt);
-real c2 = 1./(2.*beta) - 1.;
-real c3 = gamma/(beta*dt);
-real c4 = gamma/beta - 1.;
-real c5 = dt*(gamma/(2*beta) - 1.);
 
 // CFL information
 fespace P0h(Ph,P0);
@@ -45,6 +29,22 @@ cout << "Pressure wave speed: " << ps << endl;
 cout << "Shear wave speed: " << ss << endl;
 cout << "Time step for pressure: " << pt << endl;
 cout << "Time step for shear: " << st << endl;
+
+real T 		= 10;
+real dt 	= pt*0.98;
+real steps 	= T/dt;
+
+// Macros M and K as described in the PDF
+macro M(a) (a[0]*pvi+a[1]*pvj) //
+macro K(a) (lambda*(div(a)*div([pvi,pvj]))+2.*muK*mu*eps(a)'*eps([pvi,pvj])) // 
+
+// Beta Newmark constants
+real c0 = 1./(beta*dt*dt);
+real c1 = 1./(beta*dt);
+real c2 = 1./(2.*beta) - 1.;
+real c3 = gamma/(beta*dt);
+real c4 = gamma/beta - 1.;
+real c5 = dt*(gamma/(2*beta) - 1.);
 
 fespace Vh(Ph,[P1,P1]);        
 Vh [un,vn]; 			// Old displacement
@@ -91,11 +91,11 @@ for (int n = 0; n < steps; n++)
 	// Update the fields
 
     // New acceleration from Newmark
-    // uan = c0*(px - un) - c1*uvn - c2*aold
+    // uan = c0*(px - un) - c1*vold - c2*aold
     uan[] = px[];
     uan[] -= un[];
     uan[] *= c0;
-    uan[] -= c1*uvn[];
+    uan[] -= c1*vold[];
     uan[] -= c2*aold[];
 
     // New velocity from Newark

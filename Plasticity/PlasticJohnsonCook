@@ -1,35 +1,9 @@
-// Yes. This is currently just a copy of the elastic portion. 
-// Which is pretty much just a copy of the Contact elasticity portion. 
-// The elastic portion is to compare with the plastic problem. 
-// The Johnson Cook model will be added later. I am tired now, and would like to take a break. 
-
 load "iovtk"
 include "PlasticGeometry"
 include "PlasticParameters"
 
 string outdir = "..//Plasticity//results//";
 string filenum;
-
-real T 		= 50e-9;
-real dt 	= scale*1.86862e-05;
-real steps 	= T/dt;
-real toler  = 1e-3; 
-
-// Beta Newark parameters
-real beta 	= 0.25;
-real gamma 	= 0.5;
-
-// Macros M and K as described in the PDF
-macro M(a) (a[0]*vx+a[1]*vy) //
-macro K(a) (lambda*(div(a)*div([vx,vy]))+2.*mu*eps(a)'*eps([vx,vy])) // 
-
-// Beta Newmark constants
-real c0 = 1./(beta*dt*dt);
-real c1 = 1./(beta*dt);
-real c2 = 1./(2.*beta) - 1.;
-real c3 = gamma/(beta*dt);
-real c4 = gamma/beta - 1.;
-real c5 = dt*(gamma/(2*beta) - 1.);
 
 // CFL information
 fespace P0h(Ph,P0);
@@ -45,17 +19,16 @@ cout << "Shear wave speed: " << ss << endl;
 cout << "Time step for pressure: " << pt << endl;
 cout << "Time step for shear: " << st << endl;
 
+real T 		= 50e-9;
+real dt 	= pt*0.98;
+real steps 	= T/dt;
+
 fespace Kh(Ph,[P2,P2]);        
 Kh [un,vn]; 			// Old displacement
 Kh [uvn,vvn];			// Old velocity
 Kh [uan,van];			// Old acceleration
 Kh [vold,dvold];		// Dummy vars
 Kh [aold,daold];		
-
-// Waves 
-fespace Wh(Ph,P1);
-Wh pw;
-Wh sw;
 
 // Initial conditions
 un[]  = 0;
@@ -108,7 +81,6 @@ for (int n = 0; n < steps; n++)
 
 	// Block deformation
 	mesh PhDeformed = movemesh(Ph, [x+ux, y+uy]);
-	PhDeformed = adaptmesh(PhDeformed, ux, err=toler);
 	// Pressure and shear waves 
 	pw = dx(ux)+dy(uy);
 	sw = dy(ux)-dx(uy);
