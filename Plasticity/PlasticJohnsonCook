@@ -5,87 +5,95 @@ include "PlasticParameters"
 string outdir = "..//Plasticity//results//";
 string filenum;
 
-// CFL information
-fespace P0h(Ph,P0);
-P0h h = hTriangle;
-real hmin = h[].min;
-cout << "Smallest element size (hTriangle): " << hmin << endl;
-real ps = sqrt((lambda+2*mu)/rho);
-real ss = sqrt(mu/rho);
-real pt = hmin/ps;
-real st = hmin/ss;
-cout << "Pressure wave speed: " << ps << endl;
-cout << "Shear wave speed: " << ss << endl;
-cout << "Time step for pressure: " << pt << endl;
-cout << "Time step for shear: " << st << endl;
-
 real T 		= 50e-9;
-real dt 	= pt*0.98;
-real steps 	= T/dt;
-
-fespace Kh(Ph,[P2,P2]);        
-Kh [un,vn]; 			// Old displacement
-Kh [uvn,vvn];			// Old velocity
-Kh [uan,van];			// Old acceleration
-Kh [vold,dvold];		// Dummy vars
-Kh [aold,daold];		
+real MinGridSize = h[].min;
+real dt 	= TimeStepSize(MinGridSize);
+real steps 	= T/dt;	
 
 // Initial conditions
-un[]  = 0;
-[uvn,vvn] = [vimp,0];
-uan[] = 0;
-aold[]= 0;
-[vold,dvold]= [vimp,0];
+xx[]  		= 0;
+xxo[] 		= 0;
+[vx,vy] 	= [vimp,0];
+[vxo,vyo]	= [vimp,0];
+ax[] 		= 0;
+axo[]		= 0;
+PlEpsXX=0;PlEpsYY=0;PlEpsXY=0;PlEpsZZ=0; 
+EqPlEps=0; dEqPlEps=0;
+SigXX=0; SigYY=0; SigXY=0; SigZZ=0;
+Temp=T0; TGen=0;
+SigVM=0;
+SigY=SigmaY(EqPlEps,dEqPlEps,Temp);
 
 int[int] vtkorder = [1,1,1];
 
+// Secant / Newton-Raphson solve
+//func real Secant(real Lam, real LamOld, real vonMisesTrial, real EpsTrial, real dEpsTrial, real TTrial){
+//	real NewYieldFunc 	= YieldFunc(
+//	real OldYieldFunc 	= 0;
+//	real YieldFuncDiff	= NewYieldFunc-OldYieldFunc;
+//	real slope 			= 
+//	real NewLam = Lam - NewYieldFunc*
+//	return NewLam;
+//}
+
+problem Plastic([xx,yy],[vi,vj])
+	= int2d(Ph)(
+              	c0(dt)*rho*M([xx,yy])+
+				K([xx,yy])
+				)
+	  - int2d(Ph)(
+				c0(dt)*rho*M([xxo,yyo])+
+				c1(dt)*rho*M([vxo,vyo])+
+				c2(dt)*rho*M([axo,ayo])+
+				eps([vi,vj])'*Elas*[PlEpsXX,PlEpsYY,PlEpsXY]
+				)
+	  + on(left, xx=0);
+func real HeatGen(){return 0;}
 for (int n = 0; n < steps; n++)
 {
     real t  = (n+1)*dt;
 
-    problem BetaNewark([ux,uy],[vx,vy])
-        = int2d(Ph)(
-              	c0*rho*M([ux,uy])+
-				K([ux,uy])
-			)
-        - int2d(Ph)(
-				c0*rho*M([un,vn]) + c1*rho*M([uvn,vvn]) + c2*rho*M([uan,van])
-			)
-        + on(left, ux=0);
-
-    BetaNewark;
+    Plastic;
 	
 	// Update the fields
 
+	// Newark section
     // New acceleration from Newmark
-    // uan = c0*(px - un) - c1*uvn - c2*aold
-    uan[] = ux[];
-    uan[] -= un[];
-    uan[] *= c0;
-    uan[] -= c1*uvn[];
-    uan[] -= c2*aold[];
-
+    // ax = c0*(xx - xxo) - c1*vxo - c2*axo
+    ax[] =  xx[];
+    ax[] -= xxo[];
+    ax[] *= c0(dt);
+    ax[] -= c1(dt)*vx[];
+    ax[] -= c2(dt)*axo[];
     // New velocity from Newark
-	// uvn = c3*(px - un) - c4*vold - c5*aold
-    uvn[] = ux[];
-	uvn[] -= un[];
-	uvn[] *= c3;
-    uvn[] -= c4*vold[];
-	uvn[] -= c5*aold[];
+	// vx = c3*(xx - xxo) - c4*vxo - c5*axo
+    vx[] =  xx[];
+	vx[] -= xxo[];
+	vx[] *= c3(dt);
+    vx[] -= c4(dt)*vxo[];
+	vx[] -= c5(dt)*axo[];
+	// Carry over
+    xxo[] = xx[];
+	vxo[] = vx[];
+	axo[] = ax[];
 
-    un[] = ux[];
-	aold[] = uan[];
-	vold[] = uvn[];
+	// Plastic section
+	//for (int i = 0; i < Sh.ndof; i++){
+		// Set up all vars to go into Newton-Raphson and incrementing plastic strain
+		//if (VM > Y){ Newton-Raphson here }
+		//} //end for here
+	// Increment plastic strain
+	PlEpsXX[] += 1.5*dEqPlEps*dt/SigmaVM(Dev(Sigma([xx,yy])))*Dev(Sigma([xx,yy]));
 	
 	// Save data
-
-	// Block deformation
-	mesh PhDeformed = movemesh(Ph, [x+ux, y+uy]);
-	// Pressure and shear waves 
-	pw = dx(ux)+dy(uy);
-	sw = dy(ux)-dx(uy);
-
 	if (n%3==0){
+
+		// Block deformation
+		mesh PhDeformed = movemesh(Ph, [x+xx, y+yy]);
+		// Pressure and shear waves 
+		pw = dx(xx)+dy(yy);
+		sw = dy(xx)-dx(yy);
+
 		if 		(n < 10) 	filenum = "000"	+n;
 		else if (n < 100) 	filenum = "00"	+n;
 		else if (n < 1000)	filenum = "0"   +n;
@@ -93,7 +101,7 @@ for (int n = 0; n < steps; n++)
 	
     	savevtk(outdir+"Elastic"+filenum+".vtu", 
 				PhDeformed, 
-				[ux,uy], pw, sw, 
+				[xx,yy], pw, sw, 
 				dataname="displacement pressurewave shearwave",
 				order=vtkorder);
 	}

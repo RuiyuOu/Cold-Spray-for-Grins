@@ -1,21 +1,21 @@
 // Copper particle
-real rho  = 8960.;
-real E    = 117e9;
-real nu   = 0.34;
-real A    = 90e6;
-real B    = 292e6;
-real nJC  = 0.31;
-real C    = 0.025;
-real m    = 1.09;
-real dEps0 = 1.0;
+real rho  = 8960.; 	// Density
+real E    = 117e9; 	// Young's modulus
+real nu   = 0.34;  	// Poisson modulus
+real A    = 90e6;  	// 1st Johnson-Cook hardening parameter
+real B    = 292e6;  // 2nd Johnson-Cook hardening parameter
+real nJC  = 0.31;   // Johnson-Cook hardening strain exponent
+real C    = 0.025;  // Johnson-Cook rate parameter
+real m    = 1.09;   // Johnson-Cook thermal exponent
+real dEps0 = 1.0;   // Reference strain rate
 
-real Tm   = 1356.;
-real Cp   = 385.;
-real chi  = 0.9;
+real Tm   = 1356.;  // Melting temp
+real Cp   = 385.;	// Specific heat
+real chi  = 0.9;	// Heat fraction
 
-real T0    = 300.;
+real T0    = 300.;	// Starting temp
 
-real vimp  = -500.;
+real vimp  = -500.;	// Impact velocity
 
 // Lame 
 real mu     = E/(2.*(1.+nu));
@@ -33,20 +33,12 @@ func real c3(real dt){return (gamma/(beta*dt));}
 func real c4(real dt){return (gamma/beta - 1.);}
 func real c5(real dt){return (dt*(gamma/(2*beta) - 1.));}
 
-// Johnson-Cook
-func real SigmaY(real Eps, real dEps, real T){
-	real rateRatio  = max(dEps/dEps0, 1.0);
-  	real theta      = min((T-T0)/(Tm-T0), 1.0);
-  	real Hard	    = A + B*Eps^nJC;
-  	real Rate       = 1.0 + C*log(rateRatio);
-  	real Therm      = 1.0 - theta^m;
-  	return Hard*Rate*Therm;
-}
+// Thermomechanics
 
 // Elasticity tensor
 func Elas = [	[2*mu+lambda	, lambda		, 	0 ],
 				[lambda			, 2*mu+lambda	, 	0 ],
-				[0				,0				,	mu]	];
+				[0				, 0				,	mu]	];
 
 // Wave speeds
 real ps = sqrt((lambda+2*mu)/rho);
@@ -57,15 +49,37 @@ func real TimeStepSize(real GridSize){
 	return GridSize/ps;
 }
 
+// Johnson-Cook Yield Stress
+func real SigmaY(real Eps, real dEps, real T){
+	real rateRatio  = max(dEps/dEps0, 1.0);
+  	real theta      = min((T-T0)/(Tm-T0), 1.0);
+  	real Hard	    = A + B*Eps^nJC;
+  	real Rate       = 1.0 + C*log(rateRatio);
+  	real Therm      = 1.0 - theta^m;
+  	return Hard*Rate*Therm;
+}
+
+// Yield Function
+func real YieldFunc(real vonMises, real Eps, real dEps, real T){
+	return vonMises-SigmaY(Eps,dEps,T);
+}
+
 // Macros M and K as described in the PDF
 macro M(a) (a[0]*vi+a[1]*vj) //
 macro K(a) (lambda*(div(a)*div([vi,vj]))+2.*mu*eps(a)'*eps([vi,vj])) // 
-// Deviatoric Stress
-macro Dev(a) () //
-// von Mises Stress
-macro SigmaVM(DeviatoricStress) () //
+
 // Divergence
-macro div(v) (dx(v[0])+dy(v[1])) // 	
+macro div(v) (dx(v[0])+dy(v[1])) //
 // Strain vector
 macro eps(v) ([dx(v[0]),dy(v[1]),dy(v[0])+dx(v[1])]) //
+// Stress vector
+macro Sigma(v) (Elas*eps(v)) //
 
+// Unnest this to use what is needed. SigmaVM(Dev(Sigma([xx,yy])))
+// Hydrostatic Stress
+macro pStress(v) ((1.+nu)*(v[0]+v[1])/3.) //
+// Deviatoric Stress
+// This returns Voight vector form of 3x3 tensor. All the formulas are for 3D and we are in 2D sims
+macro Dev(v) ([v[0]-pStress(v), v[1]-pStress(v), nu*(v[0]+v[1])-pStress(v), v[2]]) //
+// von Mises Stress
+macro SigmaVM(DevStress) (sqrt(1.5*(DevStress[0]^2+DevStress[1]^2+DevStress[2]^2+2.*DevStress[3]^2))) //
