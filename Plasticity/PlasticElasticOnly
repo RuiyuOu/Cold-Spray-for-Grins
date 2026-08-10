@@ -17,12 +17,6 @@ xxo[] 		= 0;
 [vxo,vyo]	= [vimp,0];
 ax[] 		= 0;
 axo[]		= 0;
-PlEpsXX=0;PlEpsYY=0;PlEpsXY=0;PlEpsZZ=0; 
-EqPlEps=0; dEqPlEps=0;
-SigXX=0; SigYY=0; SigXY=0; SigZZ=0;
-Temp=T0;
-SigVM=0;
-SigY=SigmaY(EqPlEps,dEqPlEps,Temp);
 
 int[int] vtkorder = [1,1,1,1];
 
@@ -75,7 +69,7 @@ for (int n = 0; n < steps; n++)
 		// Pressure and shear waves 
 		pw = dx(xx)+dy(yy);
 		sw = dy(xx)-dx(yy);
-		SigVMw = SigmaVM(Dev(Sigma([xx,yy])));
+		SigVM = SigmaVM(Dev(Sigma([xx,yy])));
 
 		if 		(n < 10) 	filenum = "000"	+n;
 		else if (n < 100) 	filenum = "00"	+n;
@@ -84,7 +78,7 @@ for (int n = 0; n < steps; n++)
 	
     	savevtk(outdir+"Elastic"+filenum+".vtu", 
 				PhDeformed, 
-				[xx,yy], pw, sw, SigVMw,
+				[xx,yy], pw, sw, SigVM,
 				dataname="Displacement PressureWave ShearWave vonMisesStress",
 				order=vtkorder);
 	}

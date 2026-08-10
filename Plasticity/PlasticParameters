@@ -1,21 +1,21 @@
 // Copper particle
-real rho  = 8960.; 	// Density
-real E    = 117e9; 	// Young's modulus
-real nu   = 0.34;  	// Poisson modulus
-real A    = 90e6;  	// 1st Johnson-Cook hardening parameter
-real B    = 292e6;  // 2nd Johnson-Cook hardening parameter
-real nJC  = 0.31;   // Johnson-Cook hardening strain exponent
-real C    = 0.025;  // Johnson-Cook rate parameter
-real m    = 1.09;   // Johnson-Cook thermal exponent
-real dEps0 = 1.0;   // Reference strain rate
+real rho  	= 8960.; 	// Density
+real E    	= 117e9; 	// Young's modulus
+real nu   	= 0.34;  	// Poisson modulus
+real A    	= 90e6;  	// 1st Johnson-Cook hardening parameter
+real B    	= 292e6;  	// 2nd Johnson-Cook hardening parameter
+real nJC  	= 0.31;   	// Johnson-Cook hardening strain exponent
+real C    	= 0.025;  	// Johnson-Cook rate parameter
+real m    	= 1.09;   	// Johnson-Cook thermal exponent
+real dEps0 	= 1.0;   	// Reference strain rate
 
-real Tm   = 1356.;  // Melting temp
-real Cp   = 385.;	// Specific heat
-real chi  = 0.9;	// Heat fraction
+real Tm   	= 1356.;  	// Melting temp
+real Cp   	= 385.;		// Specific heat
+real chi  	= 0.9;		// Heat fraction
+real Tk 	= chi/(rho*Cp); // Temp fraction
+real T0    	= 300.;		// Starting temp
 
-real T0    = 300.;	// Starting temp
-
-real vimp  = -500.;	// Impact velocity
+real vimp  	= -2000.;	// Impact velocity
 
 // Lame 
 real mu     = E/(2.*(1.+nu));
