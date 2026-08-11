@@ -28,8 +28,7 @@ problem Plastic([xx,yy],[vi,vj])
 	  - int2d(Ph)(
 				c0(dt)*rho*M([xxo,yyo])+
 				c1(dt)*rho*M([vxo,vyo])+
-				c2(dt)*rho*M([axo,ayo])+
-				eps([vi,vj])'*Elas*[PlEpsXX,PlEpsYY,PlEpsXY]
+				c2(dt)*rho*M([axo,ayo])
 				)
 	  + on(left, xx=0);
 
