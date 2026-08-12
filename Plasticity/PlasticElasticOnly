@@ -6,7 +6,7 @@ string outdir = "..//Plasticity//results//";
 string filenum;
 
 real T 		= 50e-9;
-real MinGridSize = h[].min;
+real MinGridSize = CFL[].min;
 real dt 	= TimeStepSize(MinGridSize);
 real steps 	= T/dt;	
 
@@ -61,6 +61,14 @@ for (int n = 0; n < steps; n++)
 	vxo[] = vx[];
 	axo[] = ax[];
 	
+	// ------------- Extra junk just to make the code work
+	[ElEpsXXt,ElEpsYYt,ElEpsZZt,ElEpsXYt] = [eps([xx,yy])[0]-PlEpsXX,eps([xx,yy])[1]-PlEpsYY,0-PlEpsZZ, eps([xx,yy])[2]-PlEpsXY];
+	Trace 	= ThreeTrace([ElEpsXXt,ElEpsYYt,ElEpsZZt,ElEpsXYt]);
+	p		= (lambda+2/3*mu)*Trace; // it has sum of 2muSig_ii in hydrostatic
+	[SigXXt,SigYYt,SigZZt,SigXYt] = [lambda*Trace+2*mu*ElEpsXXt, lambda*Trace+2*mu*ElEpsYYt,lambda*Trace+2*mu*ElEpsZZt,mu*ElEpsXYt];  
+	[DevXXt,DevYYt,DevZZt,DevXYt] = Dev(p,[SigXXt,SigYYt,SigZZt,SigXYt]);
+	SigVMt	= SigmaVM([DevXXt,DevYYt,DevZZt,DevXYt]);
+
 	// Save data
 	if (n%3==0){
 		// Block deformation
@@ -68,7 +76,6 @@ for (int n = 0; n < steps; n++)
 		// Pressure and shear waves 
 		pw = dx(xx)+dy(yy);
 		sw = dy(xx)-dx(yy);
-		SigVM = SigmaVM(Dev(Sigma([xx,yy])));
 
 		if 		(n < 10) 	filenum = "000"	+n;
 		else if (n < 100) 	filenum = "00"	+n;
@@ -77,7 +84,7 @@ for (int n = 0; n < steps; n++)
 	
     	savevtk(outdir+"Elastic"+filenum+".vtu", 
 				PhDeformed, 
-				[xx,yy], pw, sw, SigVM,
+				[xx,yy], pw, sw, SigVMt,
 				dataname="Displacement PressureWave ShearWave vonMisesStress",
 				order=vtkorder);
 	}

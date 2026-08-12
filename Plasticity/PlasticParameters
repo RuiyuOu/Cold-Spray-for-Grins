@@ -86,14 +86,14 @@ macro eps(v) ([dx(v[0]),dy(v[1]),dy(v[0])+dx(v[1])]) //
 macro Sigma(v) (Elas*eps(v)) //
 
 // Unnest this to use what is needed. SigmaVM(Dev(Sigma([xx,yy])))
-// Hydrostatic Stress
-macro pStress(v) ((1.+nu)*(v[0]+v[1])/3.) //
 // Deviatoric Stress
-// This returns Voight vector form of 3x3 tensor. All the formulas are for 3D and we are in 2D sims
-macro Dev(v) ([v[0]-pStress(v), v[1]-pStress(v), nu*(v[0]+v[1])-pStress(v), v[2]]) //
+macro Dev(p,v) ([v[0]-p, v[1]-p, v[2]-p, v[3]]) //
 // von Mises Stress
 macro SigmaVM(DevStress) (sqrt(1.5*(DevStress[0]^2+DevStress[1]^2+DevStress[2]^2+2.*DevStress[3]^2))) //
 // Build 2x2 stress from hydrostatic and deviatoric
 macro TwoSigma(p,Dev) ([p+Dev[0],p+Dev[1],Dev[3]]) //
 // Build 3x3 stress from hydrostatic and deviatoric
 macro ThreeSigma(p,Dev) ([p+Dev[0],p+Dev[1],p+Dev[2],Dev[3]]) //
+
+macro ThreeTrace(v) (v[0]+v[1]+v[2]) //
+ 

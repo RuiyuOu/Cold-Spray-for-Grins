@@ -7,7 +7,7 @@ string outdir = "..//Plasticity//results//";
 string filenum;
 
 real T 		= 50e-9;
-real MinGridSize = h[].min;
+real MinGridSize = CFL[].min;
 real dt 	= TimeStepSize(MinGridSize);
 real steps 	= T/dt;	
 int  iters	= 25;
@@ -26,7 +26,7 @@ axo[] 		= 0;
 EqPlEps=0;
 p=0;
 SigVM=0; 
-Temp=300.;
+Temp=T0;
 DevXX[]=0;
 PlEpsXX[]=0;
 
@@ -34,11 +34,11 @@ int[int] vtkorder = [1,1,1,1,1];
 
 // Backwards Euler of rho v,t - div(sigma) = 0
 problem BackEuler([vx,vy],[vi,vj]) =
-    int2d(Ph)( rho/dt*([vx,vy]'*[vi,vj]) ) 	// Momentum part
-  - int2d(Ph)( rho/dt*([vxo,vyo]'*[vi,vj]) )
-  + int2d(Ph)( dt*eps([vi,vj])'*Elas*eps([vx,vy]) )		// Including stress from incrementing strain
-  + int2d(Ph)( eps([vi,vj])'*Elas*[PlEpsXX,PlEpsYY,PlEpsXY] ) 	// Old stress from old strain
-  + on(left, vx=0);
+    	int2d(Ph)( rho/dt*([vx,vy]'*[vi,vj]) ) 	// Momentum part
+  	- int2d(Ph)( rho/dt*([vxo,vyo]'*[vi,vj]) )
+  	+ int2d(Ph)( dt*eps([vi,vj])'*Elas*eps([vx,vy]) ) // Including stress from incrementing strain
+  	+ int2d(Ph)(eps([vi,vj])'*[SigXX,SigYY,SigXY] )	// Old stress
+	+ on(left, vx=0);
 
 // Newark 
 problem Newark([xx,yy],[vi,vj])
@@ -46,11 +46,12 @@ problem Newark([xx,yy],[vi,vj])
 				c0(dt)*rho*M([xx,yy])+
 				eps([vi,vj])'*Elas*eps([xx,yy]) // Including stress from incrementing strain
 				)
+	+ int2d(Ph)(eps([vi,vj])'*[SigXX,SigYY,SigXY]) // Old stress from old strain
 	- int2d(Ph)(
 				c0(dt)*rho*M([xxo,yyo])+
 				c1(dt)*rho*M([vxo,vyo])+
 				c2(dt)*rho*M([axo,ayo])+
-				eps([vi,vj])'*TwoSigma(p,DevXX[]) // Old stress from old strain
+				eps([vi,vj])'*Elas*eps([xxo,yyo])  // Including stress from incrementing strain
 				)
 	+ on(left, xx=0);
 
@@ -63,11 +64,11 @@ func real Newton(real vmTrial, real epsEqOld, real Told)
   		real Tguess  = Told + TempGen(epsEqOld+dg, dg, Told, dt);
     	real sY      = SigmaY(epsEqOld+dg, epsRate, Tguess);
     	real R       = vmTrial - 3.*mu*dg - sY;
-    	if (abs(R) < 1.0e-6*A) break;
+    	if (abs(R) < 1.0e-6*newttol) break;
 
     	real h        = max(dg*1.0e-6, 1.0e-12);
     	real epsRateh = (dg+h)/dt;
-    	real Tguessh  = Told + TempGen(epsEqOld+dg+h, epsRateh, Told, dt);
+    	real Tguessh  = Told + TempGen(epsEqOld+dg+h, dg+h, Told, dt);
     	real sYh      = SigmaY(epsEqOld+dg+h, epsRateh, Tguessh);
     	real Rh       = vmTrial - 3.*mu*(dg+h) - sYh;
 
@@ -77,56 +78,75 @@ func real Newton(real vmTrial, real epsEqOld, real Told)
     	real dgNew = dg - R/dRdg;
     	if (dgNew < 0.0) dgNew = 0.0;
     	dg = dgNew;
-  }
-  return dg;
+		if(it==newtiters) cout << "Newton iteration limit reached" << endl;
+  	}
+	
+  	return dg;
 }
 
 for ( int nt = 0; nt < steps; nt++ ){
 
 	Newark;
+
+	// Carry over
+    // New acceleration from Newmark
+    // uan = c0*(x_i+1 - x_i) - c1*vxo - c2*axo
+    ax[] =  xx[];
+    ax[] -= xxo[];
+    ax[] *= c0(dt);
+    ax[] -= c1(dt)*vx[];
+    ax[] -= c2(dt)*axo[];
+
+    // New velocity from Newark
+	// uvn = c3*(x_i+1 - x_i) - c4*vxo - c5*axo
+	vx[] =  xx[];
+	vx[] -= xxo[];
+	vx[] *= c3(dt);
+	vx[] -= c4(dt)*vxo[];
+	vx[] -= c5(dt)*axo[];
+
+	// [xx,yy] = [xx+vx*dt,yy+vy*dt];
+
+	// Carry over 
+    xxo[] = xx[];
+	vxo[] = vx[];
+	axo[] = ax[];
+
 	[ElEpsXXt,ElEpsYYt,ElEpsZZt,ElEpsXYt] = [eps([xx,yy])[0]-PlEpsXX,eps([xx,yy])[1]-PlEpsYY,0-PlEpsZZ, eps([xx,yy])[2]-PlEpsXY];
-	SigVMt = SigmaVM(Dev((Elas*[ElEpsXXt,ElEpsYYt,ElEpsXYt])));
-	[DevXXt,DevYYt,DevZZt,DevXYt] = Dev((Elas*[ElEpsXXt,ElEpsYYt,ElEpsXYt]));
+	Trace 	= ThreeTrace([ElEpsXXt,ElEpsYYt,ElEpsZZt,ElEpsXYt]);
+	p		= (lambda+2/3*mu)*Trace; // it has sum of 2muSig_ii in hydrostatic
+	[SigXXt,SigYYt,SigZZt,SigXYt] = [lambda*Trace+2*mu*ElEpsXXt, lambda*Trace+2*mu*ElEpsYYt,lambda*Trace+2*mu*ElEpsZZt,mu*ElEpsXYt];  
+	[DevXXt,DevYYt,DevZZt,DevXYt] = Dev(p,[SigXXt,SigYYt,SigZZt,SigXYt]);
+	SigVMt	= SigmaVM([DevXXt,DevYYt,DevZZt,DevXYt]);
+	
 	for (int i = 0; i < Sh.ndof; i++){
 		real DelG; 
 
 		if (YieldFunc(SigVMt[][i],EqPlEps[][i],0,Temp[][i])>YieldFuncTol){
 			DelG = 0*Newton(SigVMt[][i], EqPlEps[][i], Temp[][i]);
 		}
-			
-		// Carry over
-    	// New acceleration from Newmark
-    	// uan = c0*(x_i+1 - x_i) - c1*vxo - c2*axo
-    	ax[][i] =  xx[][i];
-    	ax[][i] -= xxo[][i];
-    	ax[][i] *= c0(dt);
-    	ax[][i] -= c1(dt)*vx[][i];
-    	ax[][i] -= c2(dt)*axo[][i];
-
-    	// New velocity from Newark
-		// uvn = c3*(x_i+1 - x_i) - c4*vxo - c5*axo
-    	vx[][i] =  xx[][i];
-		vx[][i] -= xxo[][i];
-		vx[][i] *= c3(dt);
-    	vx[][i] -= c4(dt)*vxo[][i];
-		vx[][i] -= c5(dt)*axo[][i];
-
-		// Carry over 
-    	xxo[][i] = xx[][i];
-		vxo[][i] = vx[][i];
-		axo[][i] = ax[][i];
 		
 		EqPlEps[][i] += DelG;
 		DevXX[][i]	 = (1.- 3.*mu*DelG/SigVMt[][i])*DevXXt[][i];
 		real[int] sn = [DevXX[][i], DevYY[][i], DevZZ[][i], DevXY[][i]];
 		real factor = 1.5*DelG/SigVMt[][i];
+		// A lot of instability. Newton seems to converge fine. 
+		// This block is the likely culprit.
+		// Is the 4-vector bundled together the issue?
+		// And the [][i] += is just bundling the 4 together and quadrupling 
+		// the addition?
+		// Temp is just exploding to the melting temp in a few steps. 
+		// When porting this section over to the only elastic part,
+		// The von Mises data gets some crazy artifacting and errors. 
 		PlEpsXX[][i] += factor*sn[0];
 		PlEpsYY[][i] += factor*sn[1];
 		PlEpsZZ[][i] += factor*sn[2];
 		PlEpsXY[][i] += factor*sn[3];
-		Temp[][i] 	+= TempGen(EqPlEps[][i], DelG, Temp[][i], dt);
-		real[int] ElTrial = [ElEpsXXt[][i],ElEpsYYt[][i],ElEpsZZt[][i],ElEpsXYt[][i]];
-		p[][i] 	= pStress(ElTrial);
+		Temp[][i] 	 += TempGen(EqPlEps[][i], DelG, Temp[][i], dt);
+		SigXX[][i]	 = p[][i] + DevXX[][i];
+		SigYY[][i]	 = p[][i] + DevYY[][i];
+		SigZZ[][i]	 = p[][i] + DevZZ[][i];
+		SigXY[][i]	 = DevXY[][i];
 	}
 
 	if (nt%3==0){
@@ -135,7 +155,7 @@ for ( int nt = 0; nt < steps; nt++ ){
 		// Pressure and shear waves 
 		pw = dx(xx)+dy(yy);
 		sw = dy(xx)-dx(yy);
-		SigVM = SigmaVM(Dev((Elas*[ElEpsXXt,ElEpsYYt,ElEpsXYt])));
+		SigVM = SigmaVM([DevXX,DevYY,DevZZ,DevXY]);
 
 		if 		(nt < 10) 	filenum = "000"	+nt;
 		else if (nt < 100) 	filenum = "00"	+nt;
