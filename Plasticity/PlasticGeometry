@@ -34,13 +34,12 @@ Sh SigVM, SigVMt; 		// von Mises stress
 Sh Temp; 		// Temperature
 Sh Trace; 		// This is to get the trace of the stress everywhere
 
-fespace Dh(Ph, [P1,P1,P1,P1]);
-Dh [DevXX, DevYY, DevZZ, DevXY];	// ii component of the deviatoric stress tensor
-Dh [DevXXt, DevYYt, DevZZt, DevXYt];	// ii component of the deviatoric trial stress tensor
-Dh [PlEpsXX,PlEpsYY,PlEpsZZ,PlEpsXY]; 	// ii component of plastic strain tensor
-Dh [ElEpsXXt,ElEpsYYt,ElEpsZZt,ElEpsXYt]; 	// ii component of elastic trial strain tensor
-Dh [SigXXt, SigYYt, SigZZt, SigXYt]; 	// ii component of trail stress
-Dh [SigXX, SigYY, SigZZ, SigXY]; 	// ii component of stress
+Sh DevXX, DevYY, DevZZ, DevXY;	// ii component of the deviatoric stress tensor
+Sh DevXXt, DevYYt, DevZZt, DevXYt;	// ii component of the deviatoric trial stress tensor
+Sh PlEpsXX,PlEpsYY,PlEpsZZ,PlEpsXY; 	// ii component of plastic strain tensor
+Sh ElEpsXXt,ElEpsYYt,ElEpsZZt,ElEpsXYt; 	// ii component of elastic trial strain tensor
+Sh SigXXt, SigYYt, SigZZt, SigXYt; 	// ii component of trail stress
+Sh SigXX, SigYY, SigZZ, SigXY; 	// ii component of stress
 
 // Waves 
 fespace Wh(Ph,P1);

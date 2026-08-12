@@ -112,32 +112,33 @@ for ( int nt = 0; nt < steps; nt++ ){
 	vxo[] = vx[];
 	axo[] = ax[];
 
-	[ElEpsXXt,ElEpsYYt,ElEpsZZt,ElEpsXYt] = [eps([xx,yy])[0]-PlEpsXX,eps([xx,yy])[1]-PlEpsYY,0-PlEpsZZ, eps([xx,yy])[2]-PlEpsXY];
+	ElEpsXXt= eps([xx,yy])[0]-PlEpsXX;
+	ElEpsYYt= eps([xx,yy])[1]-PlEpsYY;
+	ElEpsZZt= 0-PlEpsZZ;
+	ElEpsXYt= eps([xx,yy])[2]-PlEpsXY;
 	Trace 	= ThreeTrace([ElEpsXXt,ElEpsYYt,ElEpsZZt,ElEpsXYt]);
 	p		= (lambda+2/3*mu)*Trace; // it has sum of 2muSig_ii in hydrostatic
-	[SigXXt,SigYYt,SigZZt,SigXYt] = [lambda*Trace+2*mu*ElEpsXXt, lambda*Trace+2*mu*ElEpsYYt,lambda*Trace+2*mu*ElEpsZZt,mu*ElEpsXYt];  
-	[DevXXt,DevYYt,DevZZt,DevXYt] = Dev(p,[SigXXt,SigYYt,SigZZt,SigXYt]);
+	SigXXt 	= lambda*Trace+2*mu*ElEpsXXt;
+	SigYYt	= lambda*Trace+2*mu*ElEpsYYt;
+	SigZZt	= lambda*Trace+2*mu*ElEpsZZt;
+	SigXYt	= mu*ElEpsXYt;
+	DevXXt  = Dev(p,[SigXXt,SigYYt,SigZZt,SigXYt])[0];
+	DevYYt	= Dev(p,[SigXXt,SigYYt,SigZZt,SigXYt])[1];
+	DevZZt	= Dev(p,[SigXXt,SigYYt,SigZZt,SigXYt])[2];
+	DevXYt	= Dev(p,[SigXXt,SigYYt,SigZZt,SigXYt])[3];
 	SigVMt	= SigmaVM([DevXXt,DevYYt,DevZZt,DevXYt]);
 	
 	for (int i = 0; i < Sh.ndof; i++){
 		real DelG; 
 
 		if (YieldFunc(SigVMt[][i],EqPlEps[][i],0,Temp[][i])>YieldFuncTol){
-			DelG = 0*Newton(SigVMt[][i], EqPlEps[][i], Temp[][i]);
+			DelG = Newton(SigVMt[][i], EqPlEps[][i], Temp[][i]);
 		}
 		
 		EqPlEps[][i] += DelG;
 		DevXX[][i]	 = (1.- 3.*mu*DelG/SigVMt[][i])*DevXXt[][i];
 		real[int] sn = [DevXX[][i], DevYY[][i], DevZZ[][i], DevXY[][i]];
 		real factor = 1.5*DelG/SigVMt[][i];
-		// A lot of instability. Newton seems to converge fine. 
-		// This block is the likely culprit.
-		// Is the 4-vector bundled together the issue?
-		// And the [][i] += is just bundling the 4 together and quadrupling 
-		// the addition?
-		// Temp is just exploding to the melting temp in a few steps. 
-		// When porting this section over to the only elastic part,
-		// The von Mises data gets some crazy artifacting and errors. 
 		PlEpsXX[][i] += factor*sn[0];
 		PlEpsYY[][i] += factor*sn[1];
 		PlEpsZZ[][i] += factor*sn[2];

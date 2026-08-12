@@ -61,12 +61,21 @@ for (int n = 0; n < steps; n++)
 	vxo[] = vx[];
 	axo[] = ax[];
 	
-	// ------------- Extra junk just to make the code work
-	[ElEpsXXt,ElEpsYYt,ElEpsZZt,ElEpsXYt] = [eps([xx,yy])[0]-PlEpsXX,eps([xx,yy])[1]-PlEpsYY,0-PlEpsZZ, eps([xx,yy])[2]-PlEpsXY];
+	// ------------- Extra junk just to make the code work ------------------------
+	ElEpsXXt= eps([xx,yy])[0]-PlEpsXX;
+	ElEpsYYt= eps([xx,yy])[1]-PlEpsYY;
+	ElEpsZZt= 0-PlEpsZZ;
+	ElEpsXYt= eps([xx,yy])[2]-PlEpsXY;
 	Trace 	= ThreeTrace([ElEpsXXt,ElEpsYYt,ElEpsZZt,ElEpsXYt]);
 	p		= (lambda+2/3*mu)*Trace; // it has sum of 2muSig_ii in hydrostatic
-	[SigXXt,SigYYt,SigZZt,SigXYt] = [lambda*Trace+2*mu*ElEpsXXt, lambda*Trace+2*mu*ElEpsYYt,lambda*Trace+2*mu*ElEpsZZt,mu*ElEpsXYt];  
-	[DevXXt,DevYYt,DevZZt,DevXYt] = Dev(p,[SigXXt,SigYYt,SigZZt,SigXYt]);
+	SigXXt 	= lambda*Trace+2*mu*ElEpsXXt;
+	SigYYt	= lambda*Trace+2*mu*ElEpsYYt;
+	SigZZt	= lambda*Trace+2*mu*ElEpsZZt;
+	SigXYt	= mu*ElEpsXYt;
+	DevXXt  = Dev(p,[SigXXt,SigYYt,SigZZt,SigXYt])[0];
+	DevYYt	= Dev(p,[SigXXt,SigYYt,SigZZt,SigXYt])[1];
+	DevZZt	= Dev(p,[SigXXt,SigYYt,SigZZt,SigXYt])[2];
+	DevXYt	= Dev(p,[SigXXt,SigYYt,SigZZt,SigXYt])[3];
 	SigVMt	= SigmaVM([DevXXt,DevYYt,DevZZt,DevXYt]);
 
 	// Save data
