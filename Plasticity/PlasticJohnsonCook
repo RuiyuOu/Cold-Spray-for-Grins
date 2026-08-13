@@ -27,18 +27,8 @@ EqPlEps=0;
 p=0;
 SigVM=0; 
 Temp=T0;
-DevXX[]=0;
-PlEpsXX[]=0;
 
 int[int] vtkorder = [1,1,1,1,1];
-
-// Backwards Euler of rho v,t - div(sigma) = 0
-problem BackEuler([vx,vy],[vi,vj]) =
-    	int2d(Ph)( rho/dt*([vx,vy]'*[vi,vj]) ) 	// Momentum part
-  	- int2d(Ph)( rho/dt*([vxo,vyo]'*[vi,vj]) )
-  	+ int2d(Ph)( dt*eps([vi,vj])'*Elas*eps([vx,vy]) ) // Including stress from incrementing strain
-  	+ int2d(Ph)(eps([vi,vj])'*[SigXX,SigYY,SigXY] )	// Old stress
-	+ on(left, vx=0);
 
 // Newark 
 problem Newark([xx,yy],[vi,vj])
@@ -105,8 +95,6 @@ for ( int nt = 0; nt < steps; nt++ ){
 	vx[] -= c4(dt)*vxo[];
 	vx[] -= c5(dt)*axo[];
 
-	// [xx,yy] = [xx+vx*dt,yy+vy*dt];
-
 	// Carry over 
     xxo[] = xx[];
 	vxo[] = vx[];
@@ -129,7 +117,7 @@ for ( int nt = 0; nt < steps; nt++ ){
 	SigVMt	= SigmaVM([DevXXt,DevYYt,DevZZt,DevXYt]);
 	
 	for (int i = 0; i < Sh.ndof; i++){
-		real DelG; 
+		real DelG=0; 
 
 		if (YieldFunc(SigVMt[][i],EqPlEps[][i],0,Temp[][i])>YieldFuncTol){
 			DelG = Newton(SigVMt[][i], EqPlEps[][i], Temp[][i]);
@@ -143,6 +131,7 @@ for ( int nt = 0; nt < steps; nt++ ){
 		PlEpsYY[][i] += factor*sn[1];
 		PlEpsZZ[][i] += factor*sn[2];
 		PlEpsXY[][i] += factor*sn[3];
+		//  Is it still heating up too much? Is this line also causing troubles?
 		Temp[][i] 	 += TempGen(EqPlEps[][i], DelG, Temp[][i], dt);
 		SigXX[][i]	 = p[][i] + DevXX[][i];
 		SigYY[][i]	 = p[][i] + DevYY[][i];
