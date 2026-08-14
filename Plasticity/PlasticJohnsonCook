@@ -28,19 +28,28 @@ p=0;
 SigVM=0; 
 Temp=T0;
 
+real EStart = 0.5*rho*2*3*scale^2*vimp^2;
+
 int[int] vtkorder = [1,1,1,1,1];
+
+real C0 = c0(dt);
+real C1 = c1(dt);
+real C2 = c2(dt);
+real C3 = c3(dt);
+real C4 = c4(dt);
+real C5 = c5(dt);
 
 // Newark 
 problem Newark([xx,yy],[vi,vj])
 	= int2d(Ph)( 
-				c0(dt)*rho*M([xx,yy])+
+				C0*rho*M([xx,yy])+
 				eps([vi,vj])'*Elas*eps([xx,yy]) // Including stress from incrementing strain
 				)
 	+ int2d(Ph)(eps([vi,vj])'*[SigXX,SigYY,SigXY]) // Old stress from old strain
 	- int2d(Ph)(
-				c0(dt)*rho*M([xxo,yyo])+
-				c1(dt)*rho*M([vxo,vyo])+
-				c2(dt)*rho*M([axo,ayo])+
+				C0*rho*M([xxo,yyo])+
+				C1*rho*M([vxo,vyo])+
+				C2*rho*M([axo,ayo])+
 				eps([vi,vj])'*Elas*eps([xxo,yyo])  // Including stress from incrementing strain
 				)
 	+ on(left, xx=0);
@@ -83,17 +92,17 @@ for ( int nt = 0; nt < steps; nt++ ){
     // uan = c0*(x_i+1 - x_i) - c1*vxo - c2*axo
     ax[] =  xx[];
     ax[] -= xxo[];
-    ax[] *= c0(dt);
-    ax[] -= c1(dt)*vx[];
-    ax[] -= c2(dt)*axo[];
+    ax[] *= C0;
+    ax[] -= C1*vxo[];
+    ax[] -= C2*axo[];
 
     // New velocity from Newark
 	// uvn = c3*(x_i+1 - x_i) - c4*vxo - c5*axo
 	vx[] =  xx[];
 	vx[] -= xxo[];
-	vx[] *= c3(dt);
-	vx[] -= c4(dt)*vxo[];
-	vx[] -= c5(dt)*axo[];
+	vx[] *= C3;
+	vx[] -= C4*vxo[];
+	vx[] -= C5*axo[];
 
 	// Carry over 
     xxo[] = xx[];
@@ -140,6 +149,22 @@ for ( int nt = 0; nt < steps; nt++ ){
 	}
 
 	if (nt%3==0){
+		
+		real KE = 0.5*rho*int2d(Ph)([vx,vy]'*[vx,vy]);
+		real EE = 0.5*int2d(Ph)([SigXX,SigYY,SigXY]'*(eps([xx,yy])-[PlEpsXX,PlEpsYY,PlEpsXY]));
+		real TE = rho*Cp*int2d(Ph)(Temp-T0);
+		real TENorm = TE/0.9;
+		real PE = B/(nJC+1)*int2d(Ph)(EqPlEps^(nJC+1));
+
+		cout << "Energy Start" << EStart
+       	<< "   KE+EE " << KE+EE
+       	<< "   KE+EE+PE " << KE+EE+PE << endl;
+
+		cout << "Kinetic" << KE
+       	<< "   Elastic" << EE
+       	<< "   Thermal" << TE 
+		<< "   Plastic" << PE << endl;
+	
 		// Block deformation
 		mesh PhDeformed = movemesh(Ph, [x+xx, y+yy]);
 		// Pressure and shear waves 

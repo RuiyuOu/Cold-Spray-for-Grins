@@ -10,21 +10,65 @@ real nu 	= 0.3;	// Poisson modulus: 1
 real lambda = E*nu/((1.+nu)*(1.-2.*nu)); 	// Lame parameter: Pa
 real mu 	= E/(2.*(1.+nu));				// Lame parameter: Pa
 
-// We vectorize all matrices wherever possible
-
 // Elastic tensor
-func Elas = [[2*mu+lambda,lambda, 0. ], [lambda,2*mu+lambda, 0. ],[ 0. , 0. , mu ]];
+func Elas = [[2*mu+lambda,	lambda, 		0. ], 
+			 [lambda,		2*mu+lambda, 	0. ],
+			 [ 0. , 		0. , 			mu ]];
+
 // Divergence
 macro div(v) (dx(v[0])+dy(v[1])) // 	
 // Strain vector
 macro eps(v) ([dx(v[0]),dy(v[1]),dy(v[0])+dx(v[1])]) //
-// Strain first differential
-macro deps(v,dv) ([dx((dv)[0]),dy((dv)[1]),dy((dv)[0])+dx((dv)[1])]) //
-//Density energy for elastic bodies
-macro W2d1(v)  ((1./2.)*( eps(v)'* Elas *eps(v))) //
-// Density energy first differential
-macro dW2d1(v,dv)((1./2.)*( eps(v)'*Elas*deps(v,dv)) + (1./2.)*((deps(v,dv))'*Elas*eps(v))) //
-// Density energy second differential
-macro ddW2d1(v,dv,ddv)((1./2.)*( deps(v,ddv)'*Elas*deps(v,dv)) + (1./2.)*((deps(v,dv))'*Elas*deps(v,ddv))) //
-// Stress vector
-macro sigma(v) (Elas*eps(v)) //
+
+// Macros M and K as described in the PDF
+macro M(a) (a[0]*pvi+a[1]*pvj) //
+macro K(a) (lambda*(div(a)*div([pvi,pvj]))+2.*muK*mu*eps(a)'*eps([pvi,pvj])) //
+
+// Beta Newmark constants
+func real c0(real dt, real beta, real gamma){return 1./(beta*dt*dt);}
+func real c1(real dt, real beta, real gamma){return 1./(beta*dt);}
+func real c2(real dt, real beta, real gamma){return 1./(2.*beta) - 1.;}
+func real c3(real dt, real beta, real gamma){return gamma/(beta*dt);}
+func real c4(real dt, real beta, real gamma){return gamma/beta - 1.;}
+func real c5(real dt, real beta, real gamma){return dt*(gamma/(2*beta) - 1.);}
+
+// Wave speeds
+real ps = sqrt((lambda+2*mu));
+real ss = sqrt(mu);
+
+// Time step size
+func real TimeStepSize(real GridSize){
+	return GridSize/ps;
+}
+
+// Active Contact functions
+
+bool Persistence = false;
+
+// Shows if 2 blocks of materials are in active compression
+func real Compression(){
+	return 0;
+	}
+
+// Shows if 2 blocks of materials are actively overlapping
+func real Overlap(mesh Th1,mesh Th2){
+	return (int2d(Th1)(chi(Th2)(x,y))+int2d(Th2)(chi(Th1)(x,y)));
+	}
+
+// Boolean to identify active contact between bodies	
+func bool ContactActive(mesh Th1, mesh Th2){
+
+	if (Persistence == true){
+		if (Compression() > 0){
+			return true;}
+		else{return false;}
+	}
+
+	else {
+		if(Overlap(Th1,Th2) > 0){
+			return true;
+		}
+		else{return false;}
+	}
+
+}

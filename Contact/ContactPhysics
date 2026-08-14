@@ -1,0 +1,48 @@
+load "iovtk"
+load "ff-Ipopt"
+load "msh3"
+include "ContactGeometry"
+include "ContactElasticity"
+
+string outdir = "..//Contact//results//";
+string filenum;
+
+// Beta Newark parameters
+real beta 	= 0.25;
+real gamma 	= 0.5;
+
+real T 		= 10;
+real MinGridSize = cCFL.min;
+real dt 	= TimeStepSize(MinGridSize);
+real steps 	= T/dt;	
+
+problem BetaNewark([pxx,pyy],[pvi,pvj])
+	= int2d(Ph)(
+              	c0(dt,beta,gamma)*M([pxx,pyy])+
+				K([pxx,pyy])
+				)
+    - int2d(Ph)(
+				c0(dt,beta,gamma)*M([pxxo,pyyo]) + c1(dt,beta,gamma)*M([pvxo,pvyo]) + c2(dt,beta,gamma)*M([paxo,payo])+
+				g*pvj
+				//+Boundary Traction term
+				)
+    + on(bottom, pyy=0);
+
+problem BetaNewark([cxx,cyy],[cvi,cvj])
+	= int2d(Ch)(
+              	c0(dt,beta,gamma)*M([cxx,cyy])+
+				K([cxx,cyy])
+				)
+    - int2d(Ch)(
+				c0(dt,beta,gamma)*M([cxxo,cyyo]) + c1(dt,beta,gamma)*M([cvxo,cvyo]) + c2(dt,beta,gamma)*M([caxo,cayo])+
+				g*pvj
+				//+Boundary Traction term
+				);
+
+for (int nt = 0; nt < steps; nt++){
+	
+	// Schwarz loop
+	
+	// Do plate contact check
+
+}

@@ -20,15 +20,22 @@ axo[]		= 0;
 
 int[int] vtkorder = [1,1,1,1];
 
+real C0 = c0(dt);
+real C1 = c1(dt);
+real C2 = c2(dt);
+real C3 = c3(dt);
+real C4 = c4(dt);
+real C5 = c5(dt);
+
 problem Plastic([xx,yy],[vi,vj])
 	= int2d(Ph)(
-              	c0(dt)*rho*M([xx,yy])+
+              	C0*rho*M([xx,yy])+
 				K([xx,yy])
 				)
 	  - int2d(Ph)(
-				c0(dt)*rho*M([xxo,yyo])+
-				c1(dt)*rho*M([vxo,vyo])+
-				c2(dt)*rho*M([axo,ayo])
+				C0*rho*M([xxo,yyo])+
+				C1*rho*M([vxo,vyo])+
+				C2*rho*M([axo,ayo])
 				)
 	  + on(left, xx=0);
 
@@ -41,20 +48,20 @@ for (int n = 0; n < steps; n++)
 	// Update the fields
 
     // New acceleration from Newmark
-    // uan = c0*(x_i+1 - x_i) - c1*vxo - c2*axo
+    // uan = c0*(x_i+1 - x_i) - c1*v_i - c2*a_i
     ax[] =  xx[];
     ax[] -= xxo[];
-    ax[] *= c0(dt);
-    ax[] -= c1(dt)*vx[];
-    ax[] -= c2(dt)*axo[];
+    ax[] *= C0;
+    ax[] -= C1*vxo[];
+    ax[] -= C2*axo[];
 
     // New velocity from Newark
-	// uvn = c3*(x_i+1 - x_i) - c4*vxo - c5*axo
+	// uvn = c3*(x_i+1 - x_i) - c4*v_i - c5*a_i
     vx[] =  xx[];
 	vx[] -= xxo[];
-	vx[] *= c3(dt);
-    vx[] -= c4(dt)*vxo[];
-	vx[] -= c5(dt)*axo[];
+	vx[] *= C3;
+    vx[] -= C4*vxo[];
+	vx[] -= C5*axo[];
 
 	// Carry over 
     xxo[] = xx[];
@@ -80,6 +87,14 @@ for (int n = 0; n < steps; n++)
 
 	// Save data
 	if (n%3==0){
+
+		real KE = 0.5*rho*int2d(Ph)([vx,vy]'*[vx,vy]);
+		real EE = 0.5*int2d(Ph)(eps([xx,yy])'*Elas*eps([xx,yy]));
+
+		cout << "Kinetic Energy" << KE << endl;
+		cout << "Elastic Energy" << EE << endl;
+		cout << "Total Energy" << KE+EE << endl;
+
 		// Block deformation
 		mesh PhDeformed = movemesh(Ph, [x+xx, y+yy]);
 		// Pressure and shear waves 

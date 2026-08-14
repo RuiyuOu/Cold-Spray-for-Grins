@@ -17,6 +17,26 @@ mesh Ph = buildmesh(S1(5*nn)+S2(nn)+S3(5*nn)+S4(nn));
 mesh Ch = buildmesh(S5(5*nn));
 
 fespace UhP(Ph,[P1,P1]);
-UhP [px,py],[pvi,pvj];
+UhP [pxx,pyy];
+UhP [pxxo,pyyo];
+UhP [pvx,pvy];
+UhP [pvxo,pvyo];
+UhP [pax,pay];
+UhP [paxo,payo];
+UhP [pvi,pvj];
 fespace UhC(Ch,[P1,P1]);
-UhC [cx,cy],[cvi,cvj];
+UhC [cxx,cyy];
+UhC [cxxo,cyyo];
+UhC [cvx,cvy];
+UhC [cvxo,cvyo];
+UhC [cax,cay];
+UhC [caxo,cayo];
+UhC [cvi,cvj];
+
+// CFL information
+fespace PCFL(Ph,P0);
+PCFL pCFL = hTriangle;
+
+// CFL information
+fespace CCFL(Ch,P0);
+PCFL cCFL = hTriangle;
