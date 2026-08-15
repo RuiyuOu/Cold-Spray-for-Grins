@@ -1,0 +1,116 @@
+int bottom = 1;
+int right = 2;
+int top = 3;
+int left = 4;
+int circle1 = 5;
+int circle2 = 6;
+
+int nn = 10;
+
+real scale = 25e-6;
+
+border S1(t=0,1){ x=scale*(6*t);   y=0;   label=bottom; }
+border S2(t=0,1){ x=scale*6;   y=scale*2*t;   label=right; }
+border S3(t=0,1){ x=scale*(6-6*t); y=scale*2;   label=top; }
+border S4(t=0,1){ x=0;   y=scale*(2-2*t); label=left; }
+border S5(t=0,2*3.14159265){x=scale*(2.65+0.5*cos(t)); y=scale*(3+0.5*sin(t)); label=circle1;}
+border S6(t=0,2*3.14159265){x=scale*(3.35+0.5*cos(t)); y=scale*(4.5+0.5*sin(t)); label=circle2;}
+
+mesh Ph = buildmesh(S1(5*nn)+S2(nn)+S3(5*nn)+S4(nn));
+mesh C1h = buildmesh(S5(3*nn));
+mesh C2h = buildmesh(S6(3*nn));
+
+// Vector spaces
+fespace UhP(Ph,[P1,P1]);
+UhP [pxx,pyy];
+UhP [pxxo,pyyo];
+UhP [pvx,pvy];
+UhP [pvxo,pvyo];
+UhP [pax,pay];
+UhP [paxo,payo];
+UhP [pvi,pvj];
+fespace UhC1(C1h,[P1,P1]);
+UhC1 [c1xx,c1yy];
+UhC1 [c1xxo,c1yyo];
+UhC1 [c1vx,c1vy];
+UhC1 [c1vxo,c1vyo];
+UhC1 [c1ax,c1ay];
+UhC1 [c1axo,c1ayo];
+UhC1 [c1vi,c1vj];
+fespace UhC2(C2h,[P1,P1]);
+UhC2 [c2xx,c2yy];
+UhC2 [c2xxo,c2yyo];
+UhC2 [c2vx,c2vy];
+UhC2 [c2vxo,c2vyo];
+UhC2 [c2ax,c2ay];
+UhC2 [c2axo,c2ayo];
+UhC2 [c2vi,c2vj];
+
+// Schwarz information
+fespace ShP(Ph,P1);
+ShP TractPx, TractPy;
+ShP DirPx,   DirPy;
+ShP TransPx, TransPy;
+ShP LambdaPx, LambdaPy;
+ShP TractNP;
+ShP pEqPlEps;
+ShP pP;
+ShP pSigVM, pSigVMt;
+ShP pTemp;
+ShP pTrace;
+ShP pDevXX, pDevYY, pDevZZ, pDevXY;
+ShP pDevXXt, pDevYYt, pDevZZt, pDevXYt;
+ShP pPlEpsXX, pPlEpsYY, pPlEpsZZ, pPlEpsXY;
+ShP pElEpsXXt, pElEpsYYt, pElEpsZZt, pElEpsXYt;
+ShP pSigXXt, pSigYYt, pSigZZt, pSigXYt;
+ShP pSigXX, pSigYY, pSigZZ, pSigXY;
+fespace ShC1(C1h,P1);
+ShC1 TractC1x, TractC1y;
+ShC1 DirC1x,   DirC1y;
+ShC1 TransC1x, TransC1y;
+ShC1 LambdaC1x, LambdaC1y;
+ShC1 TractNC1;
+ShC1 c1EqPlEps;
+ShC1 c1P;
+ShC1 c1SigVM, c1SigVMt;
+ShC1 c1Temp;
+ShC1 c1Trace;
+ShC1 c1DevXX, c1DevYY, c1DevZZ, c1DevXY;
+ShC1 c1DevXXt, c1DevYYt, c1DevZZt, c1DevXYt;
+ShC1 c1PlEpsXX, c1PlEpsYY, c1PlEpsZZ, c1PlEpsXY;
+ShC1 c1ElEpsXXt, c1ElEpsYYt, c1ElEpsZZt, c1ElEpsXYt;
+ShC1 c1SigXXt, c1SigYYt, c1SigZZt, c1SigXYt;
+ShC1 c1SigXX, c1SigYY, c1SigZZ, c1SigXY;
+fespace ShC2(C2h,P1);
+ShC2 TractC2x, TractC2y;
+ShC2 DirC2x,   DirC2y;
+ShC2 TransC2x, TransC2y;
+ShC2 LambdaC2x, LambdaC2y;
+ShC2 TractNC2;
+ShC2 c2EqPlEps;
+ShC2 c2P;
+ShC2 c2SigVM, c1SigVMt;
+ShC2 c2Temp;
+ShC2 c2Trace;
+ShC2 c2DevXX, c2DevYY, c2DevZZ, c2DevXY;
+ShC2 c2DevXXt, c2DevYYt, c2DevZZt, c2DevXYt;
+ShC2 c2PlEpsXX, c2PlEpsYY, c2PlEpsZZ, c2PlEpsXY;
+ShC2 c2ElEpsXXt, c2ElEpsYYt, c2ElEpsZZt, c2ElEpsXYt;
+ShC2 c2SigXXt, c2SigYYt, c2SigZZt, c2SigXYt;
+ShC2 c2SigXX, c2SigYY, c2SigZZ, c2SigXY;
+
+// Contact information
+fespace ChP(Ph,P0);
+ChP ContPC1, ContPC2;
+fespace ChC1(C1h,P0);
+ChC1 ContC1P, ContC1C2;
+fespace ChC2(C2h,P0);
+ChC2 ContC2P, ContC2C1;
+
+// CFL information
+fespace PCFL(Ph,P0);
+PCFL pCFL = hTriangle;
+fespace C1CFL(C1h,P0);
+C1CFL c1CFL = hTriangle;
+fespace C2CFL(C2h,P0);
+C2CFL c2CFL = hTriangle;

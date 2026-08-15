@@ -1,0 +1,83 @@
+// ----------------------- General Constants -----------------------
+real vimp  	= -500.;	// Impact velocity
+real T0    	= 300.;		// Starting temp
+real TQ  	= 0.9;		// Taylor-Quincy Heat fraction
+real dEps0 	= 1.0;   	// Reference strain rate
+// ----------------------- Material Properties -----------------------
+// Copper
+real rhoC  	= 8960.; 	// Density
+real EC    	= 117e9; 	// Young's modulus
+real nuC   	= 0.34;  	// Poisson modulus
+real AC    	= 90e6;  	// 1st Johnson-Cook hardening parameter
+real BC    	= 292e6;  	// 2nd Johnson-Cook hardening parameter
+real nJCC  	= 0.31;   	// Johnson-Cook hardening strain exponent
+real CC    	= 0.025;  	// Johnson-Cook rate parameter
+real mC    	= 1.09;   	// Johnson-Cook thermal exponent
+real TmC   	= 1356.;  	// Melting temp
+real CpC   	= 385.;		// Specific heat
+// Aluminium
+real rhoA  = 2700.;
+real EA    = 70e9;
+real nuA   = 0.33;
+real AA    = 110e6;
+real BA    = 150e6;
+real nJCA  = 0.36;
+real CA    = 0.001;
+real TmA   = 933.;
+real CpA   = 900.;
+// ----------------------- Macros -----------------------
+// Newark Macros
+macro M(a,p) (a[0]*p[0]+a[1]*p[1]) //
+macro K(a,p) (eps(a)'*Elas*eps(p)) //
+// Divergence
+macro div(v) (dx(v[0])+dy(v[1])) // 	
+// Strain vector
+macro eps(v) ([dx(v[0]),dy(v[1]),dy(v[0])+dx(v[1])]) //
+// Stress vector
+macro Sigma(v) (Elas*eps(v)) //
+// Deviatoric Stress
+macro Dev(p,v) ([v[0]-p, v[1]-p, v[2]-p, v[3]]) //
+// von Mises Stress
+macro SigmaVM(DevStress) (sqrt(1.5*(DevStress[0]^2+DevStress[1]^2+DevStress[2]^2+2.*DevStress[3]^2))) //
+// Trace of a 3x3 matrix in the Voight notation used consistently here
+macro ThreeTrace(v) (v[0]+v[1]+v[2]) //
+// ----------------------- Universal Functions -----------------------
+// Newark constants
+func real c0(real dt, real beta, real gamma){return 1./(beta*dt*dt);}
+func real c1(real dt, real beta, real gamma){return 1./(beta*dt);}
+func real c2(real dt, real beta, real gamma){return 1./(2.*beta) - 1.;}
+func real c3(real dt, real beta, real gamma){return gamma/(beta*dt);}
+func real c4(real dt, real beta, real gamma){return gamma/beta - 1.;}
+func real c5(real dt, real beta, real gamma){return dt*(gamma/(2*beta) - 1.);}
+// Time step size
+func real TimeStepSize(real GridSize, real Velocity){
+	return GridSize/Velocity;}
+// ----------------------- Contact Functions -----------------------
+// Evaluate if the traction stress is compressive
+real CompTol = 0;
+func bool Compression(real[int] &Tract){
+	return (Tract.min < -CompTol);}
+// Evaluate if 2 blocks are actively overlapping
+real OverlapTol = 1e-8;
+func bool Overlap(mesh &Th1, mesh &Th2){
+	return (int2d(Th1)(chi(Th2)(x,y))+int2d(Th2)(chi(Th1)(x,y)) > OverlapTol);}
+// Boolean to identify active contact between bodies
+func bool ContactChecker(bool Pers, mesh &Th1Def, real[int] &Tract1,
+                          mesh &Th2Def, real[int] &Tract2){
+	if (Pers){return (Compression(Tract1) || Compression(Tract2));}
+	else {return Overlap(Th1Def,Th2Def);}}
+// ----------------------- Plasticity Functions -----------------------
+// Johnson-Cook Yield Stress
+func real SigmaY(real A, real B, real nJC, real C, real Eps, real dEps, real T, real Tm, real m){
+	real rateRatio  = max(dEps/dEps0, 1.0);
+  	real theta      = min((T-T0)/(Tm-T0), 1.0);
+  	real Hard	    = A + B*Eps^nJC;
+  	real Rate       = 1.0 + C*log(rateRatio);
+  	real Therm      = 1.0 - theta^m;
+  	return Hard*Rate*Therm;}
+// Yield Function
+func real YieldFunc(real vonMises, real A, real B, real nJC, real C, real Eps, real dEps, real T, real Tm, real m){
+	return vonMises-SigmaY(A,B,nJC,C,Eps,dEps,T,Tm,m);}
+// Temperature Generated
+func real TempGen(real rho, real A, real B, real nJC, real C, real Eps, real dEps, real T, real Tm, real m, real TQ, real Cp){
+	return TQ/rho/Cp*dEps*SigmaY(A,B,nJC,C,Eps,dEps,T,Tm,m);}

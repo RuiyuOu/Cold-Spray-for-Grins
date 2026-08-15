@@ -84,4 +84,3 @@ macro Dev(p,v) ([v[0]-p, v[1]-p, v[2]-p, v[3]]) //
 macro SigmaVM(DevStress) (sqrt(1.5*(DevStress[0]^2+DevStress[1]^2+DevStress[2]^2+2.*DevStress[3]^2))) //
 // Trace of a 3x3 matrix in the Voight notation used consistently here
 macro ThreeTrace(v) (v[0]+v[1]+v[2]) //
- 

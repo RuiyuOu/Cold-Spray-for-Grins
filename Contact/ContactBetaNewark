@@ -5,6 +5,21 @@ include "ContactElasticity"
 string outdir = "..//Contact//results//";
 string filenum;
 
+// We will be assuming a density of 1kg/m^3
+real E 		= 1E3; 	// Young's modulus: kg/m/s^2
+real nu 	= 0.3;	// Poisson modulus: 1
+
+real lambda = E*nu/((1.+nu)*(1.-2.*nu)); 	// Lame parameter: Pa
+real mu 	= E/(2.*(1.+nu));				// Lame parameter: Pa
+
+real muK = 3E-2;
+mu = muK*mu;
+
+// Elastic tensor
+func Elas = [[2*mu+lambda,	lambda, 		0. ], 
+			 [lambda,		2*mu+lambda, 	0. ],
+			 [ 0. , 		0. , 			mu ]];
+
 // Beta Newark parameters
 real beta 	= 0.25;
 real gamma 	= 0.5;
@@ -13,12 +28,14 @@ real gamma 	= 0.5;
 real AlphaM 	= 0.01;
 real AlphaK 	= 0.01;
 
-// Lame scaling term
-real muK = 3e-2;
+// Wave speeds
+real ps = sqrt((lambda+2*mu));
+real ss = sqrt(mu);
 
+// Time and step sizes
 real T 		= 10;
 real MinGridSize = pCFL[].min;
-real dt 	= TimeStepSize(MinGridSize);
+real dt 	= TimeStepSize(MinGridSize,max(ps,ss));
 real steps 	= T/dt;	
 
 // Waves 
@@ -45,18 +62,26 @@ real C5 = c5(dt,beta,gamma);
 
 problem BetaNewark([pxx,pyy],[pvi,pvj])
 	= int2d(Ph)(
-              	C0*M([pxx,pyy])+
-				AlphaM*C3*M([pxx,pyy])+
-				AlphaK*C3*K([pxx,pyy])+
-				K([pxx,pyy])
+              	C0*M([pxx,pyy],[pvi,pvj])+
+				AlphaM*C3*M([pxx,pyy],[pvi,pvj])+
+				AlphaK*C3*K([pxx,pyy],[pvi,pvj])+
+				K([pxx,pyy],[pvi,pvj])
 				)
     - int2d(Ph)(
-				C0*M([pxxo,pyyo]) + C1*M([pvxo,pvyo]) + C2*M([paxo,payo])+
-				AlphaM*(C3*M([pxxo,pyyo]) + C4*M([pvxo,pvyo]) + C5*M([paxo,payo]))+
-				AlphaK*(C3*K([pxxo,pyyo]) + C4*K([pvxo,pvyo]) + C5*K([paxo,payo]))+
+				C0*M([pxxo,pyyo],[pvi,pvj]) +
+				C1*M([pvxo,pvyo],[pvi,pvj]) + 
+				C2*M([paxo,payo],[pvi,pvj]) +
+				AlphaM*(C3*M([pxxo,pyyo],[pvi,pvj]) 
+					  + C4*M([pvxo,pvyo],[pvi,pvj]) 
+					  + C5*M([paxo,payo],[pvi,pvj]))+
+				AlphaK*(C3*K([pxxo,pyyo],[pvi,pvj]) 
+					  + C4*K([pvxo,pvyo],[pvi,pvj]) 
+					  + C5*K([paxo,payo],[pvi,pvj]))+
 				g*pvj
 				)
     + on(bottom, pyy=0);
+
+real EStart = int2d(Ph)(-g*y);
 
 for (int n = 0; n < steps; n++)
 {
@@ -87,19 +112,25 @@ for (int n = 0; n < steps; n++)
 	pvxo[] = pvx[];
 	
 	// Save data
-
-	// Block deformation
-	mesh PhDeformed = movemesh(Ph, [x+pxx, y+pyy]);
-	// Pressure and shear waves 
-	pw = dx(pxx)+dy(pyy);
-	sw = dy(pxx)-dx(pyy);
-
 	if (n%5==0){
 		if 		(n < 10) 	filenum = "000"	+n;
 		else if (n < 100) 	filenum = "00"	+n;
 		else if (n < 1000)	filenum = "0"   +n;
 		else 				filenum = n;
-	
+			
+		// Block deformation
+		mesh PhDeformed = movemesh(Ph, [x+pxx, y+pyy]);
+		// Pressure and shear waves 
+		pw = dx(pxx)+dy(pyy);
+		sw = dy(pxx)-dx(pyy);
+
+		real KE = 0.5*int2d(Ph)([pvx,pvy]'*[pvx,pvy]);
+		real EE = 0.5*int2d(Ph)(eps([pxx,pyy])'*Elas*eps([pxx,pyy]));
+		real GE = int2d(Ph)(-g*y);
+
+		cout << "EStart " << EStart << endl;
+		cout << "KE+EE+GE " << KE+EE+GE << endl;
+
     	savevtk(outdir+"betanewark"+filenum+".vtu", 
 				PhDeformed, 
 				[pxx,pyy], pw, sw, 

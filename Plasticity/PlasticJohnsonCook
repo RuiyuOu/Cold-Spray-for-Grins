@@ -29,6 +29,9 @@ SigVM=0;
 Temp=T0;
 
 real EStart = 0.5*rho*2*3*scale^2*vimp^2;
+real HMax 	= rho*Cp*(Tm-T0)*2*3*scale^2;
+cout << "EStart" << EStart << endl;
+cout << "Max heat energy" << HMax << endl;
 
 int[int] vtkorder = [1,1,1,1,1];
 
@@ -140,7 +143,8 @@ for ( int nt = 0; nt < steps; nt++ ){
 		PlEpsYY[][i] += factor*sn[1];
 		PlEpsZZ[][i] += factor*sn[2];
 		PlEpsXY[][i] += factor*sn[3];
-		//  Is it still heating up too much? Is this line also causing troubles?
+		// I think this is still heating up too much. 
+		// There is not enough starting kinetic energy to generate all the heat so far.
 		Temp[][i] 	 += TempGen(EqPlEps[][i], DelG, Temp[][i], dt);
 		SigXX[][i]	 = p[][i] + DevXX[][i];
 		SigYY[][i]	 = p[][i] + DevYY[][i];
@@ -154,16 +158,13 @@ for ( int nt = 0; nt < steps; nt++ ){
 		real EE = 0.5*int2d(Ph)([SigXX,SigYY,SigXY]'*(eps([xx,yy])-[PlEpsXX,PlEpsYY,PlEpsXY]));
 		real TE = rho*Cp*int2d(Ph)(Temp-T0);
 		real TENorm = TE/0.9;
-		real PE = B/(nJC+1)*int2d(Ph)(EqPlEps^(nJC+1));
 
 		cout << "Energy Start" << EStart
-       	<< "   KE+EE " << KE+EE
-       	<< "   KE+EE+PE " << KE+EE+PE << endl;
+       	<< "   KE+EE+TE " << KE+EE+TE << endl;
 
 		cout << "Kinetic" << KE
        	<< "   Elastic" << EE
-       	<< "   Thermal" << TE 
-		<< "   Plastic" << PE << endl;
+       	<< "   Thermal" << TE << endl;
 	
 		// Block deformation
 		mesh PhDeformed = movemesh(Ph, [x+xx, y+yy]);

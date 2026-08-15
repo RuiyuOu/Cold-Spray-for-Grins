@@ -3,26 +3,14 @@
 // Gravity
 real g = -9.8;
 
-// We will be assuming a density of 1kg/m^3
-real E 		= 1E3; 	// Young's modulus: kg/m/s^2
-real nu 	= 0.3;	// Poisson modulus: 1
-
-real lambda = E*nu/((1.+nu)*(1.-2.*nu)); 	// Lame parameter: Pa
-real mu 	= E/(2.*(1.+nu));				// Lame parameter: Pa
-
-// Elastic tensor
-func Elas = [[2*mu+lambda,	lambda, 		0. ], 
-			 [lambda,		2*mu+lambda, 	0. ],
-			 [ 0. , 		0. , 			mu ]];
-
 // Divergence
 macro div(v) (dx(v[0])+dy(v[1])) // 	
 // Strain vector
 macro eps(v) ([dx(v[0]),dy(v[1]),dy(v[0])+dx(v[1])]) //
 
 // Macros M and K as described in the PDF
-macro M(a) (a[0]*pvi+a[1]*pvj) //
-macro K(a) (lambda*(div(a)*div([pvi,pvj]))+2.*muK*mu*eps(a)'*eps([pvi,pvj])) //
+macro M(a,p) (a[0]*p[0]+a[1]*p[1]) //
+macro K(a,p) (eps(a)'*Elas*eps(p)) //
 
 // Beta Newmark constants
 func real c0(real dt, real beta, real gamma){return 1./(beta*dt*dt);}
@@ -32,39 +20,32 @@ func real c3(real dt, real beta, real gamma){return gamma/(beta*dt);}
 func real c4(real dt, real beta, real gamma){return gamma/beta - 1.;}
 func real c5(real dt, real beta, real gamma){return dt*(gamma/(2*beta) - 1.);}
 
-// Wave speeds
-real ps = sqrt((lambda+2*mu));
-real ss = sqrt(mu);
-
 // Time step size
-func real TimeStepSize(real GridSize){
-	return GridSize/ps;
+func real TimeStepSize(real GridSize, real Velocity){
+	return GridSize/Velocity;
 }
 
 // Active Contact functions
 
-// Retain information of last time step
-bool Persistence = false;
-
-// Shows if 2 blocks are in compression
-func bool Compression(meshL ThB, real Contact, real Traction){
-	real BoundStress = (Contact*Traction).min;
-	if (BoundStress < 0){return true;}
-	else {return false;}
+// Evaluate if the traction stress is compressive
+real CompTol = 0;
+func bool Compression(real[int] &Tract){
+	return (Tract.min < -CompTol);
 }
 
-// Shows if 2 blocks are actively overlapping
-func bool Overlap(mesh Th1, mesh Th2){
-	return (int2d(Th1)(chi(Th2)(x,y))+int2d(Th2)(chi(Th1)(x,y)) > 0);
+// Evaluate if 2 blocks are actively overlapping
+real OverlapTol = 1e-8;
+func bool Overlap(mesh &Th1, mesh &Th2){
+	return (int2d(Th1)(chi(Th2)(x,y))+int2d(Th2)(chi(Th1)(x,y)) > OverlapTol);
 }
 
 // Boolean to identify active contact between bodies
-func bool ContactChecker(mesh Th1, meshL Th1B, real Cont1, real Tract1, mesh Th2, meshL Th2B, real Cont2, real Tract2){
-
-	if (Persistence == true){
-		return Compression(Th1, Cont1, Tract1);
+func bool ContactChecker(bool Pers, mesh &Th1Def, real[int] &Tract1,
+                          mesh &Th2Def, real[int] &Tract2){
+	if (Pers){
+		return (Compression(Tract1) || Compression(Tract2));
 	}
 	else {
-		return Overlap(Th1,Th2);
+		return Overlap(Th1Def,Th2Def);
 	}
 }
