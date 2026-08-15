@@ -43,32 +43,28 @@ func real TimeStepSize(real GridSize){
 
 // Active Contact functions
 
+// Retain information of last time step
 bool Persistence = false;
 
-// Shows if 2 blocks of materials are in active compression
-func real Compression(){
-	return 0;
-	}
+// Shows if 2 blocks are in compression
+func bool Compression(meshL ThB, real Contact, real Traction){
+	real BoundStress = (Contact*Traction).min;
+	if (BoundStress < 0){return true;}
+	else {return false;}
+}
 
-// Shows if 2 blocks of materials are actively overlapping
-func real Overlap(mesh Th1,mesh Th2){
-	return (int2d(Th1)(chi(Th2)(x,y))+int2d(Th2)(chi(Th1)(x,y)));
-	}
+// Shows if 2 blocks are actively overlapping
+func bool Overlap(mesh Th1, mesh Th2){
+	return (int2d(Th1)(chi(Th2)(x,y))+int2d(Th2)(chi(Th1)(x,y)) > 0);
+}
 
-// Boolean to identify active contact between bodies	
-func bool ContactActive(mesh Th1, mesh Th2){
+// Boolean to identify active contact between bodies
+func bool ContactChecker(mesh Th1, meshL Th1B, real Cont1, real Tract1, mesh Th2, meshL Th2B, real Cont2, real Tract2){
 
 	if (Persistence == true){
-		if (Compression() > 0){
-			return true;}
-		else{return false;}
+		return Compression(Th1, Cont1, Tract1);
 	}
-
 	else {
-		if(Overlap(Th1,Th2) > 0){
-			return true;
-		}
-		else{return false;}
+		return Overlap(Th1,Th2);
 	}
-
 }

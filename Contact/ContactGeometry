@@ -13,8 +13,9 @@ border S4(t=0,1){ x=0;   y=1-1*t; label=left; }
 border S5(t=0,2*3.14159265){x=2.5+0.5*cos(t); y=2+0.5*sin(t); label=circle;}
 
 mesh Ph = buildmesh(S1(5*nn)+S2(nn)+S3(5*nn)+S4(nn));
-
+meshL BPh = extract(Ph);
 mesh Ch = buildmesh(S5(5*nn));
+meshL BCh = extract(Ph);
 
 fespace UhP(Ph,[P1,P1]);
 UhP [pxx,pyy];
@@ -24,6 +25,13 @@ UhP [pvxo,pvyo];
 UhP [pax,pay];
 UhP [paxo,payo];
 UhP [pvi,pvj];
+
+fespace LChP(BPh,P0);
+LChP ContP;	// Boolean 0 and 1 for surface in contact or not
+
+fespace LhP(BPh,P1);
+LhP TractPx, TractPy;
+
 fespace UhC(Ch,[P1,P1]);
 UhC [cxx,cyy];
 UhC [cxxo,cyyo];
@@ -32,6 +40,12 @@ UhC [cvxo,cvyo];
 UhC [cax,cay];
 UhC [caxo,cayo];
 UhC [cvi,cvj];
+
+fespace LChC(BCh,P0);
+LChC ContC;	// Boolean 0 and 1 for surface in contact or not
+
+fespace LhC(BCh,P1);
+LhP TractCx, TractCy;
 
 // CFL information
 fespace PCFL(Ph,P0);

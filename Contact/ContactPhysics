@@ -1,6 +1,4 @@
 load "iovtk"
-load "ff-Ipopt"
-load "msh3"
 include "ContactGeometry"
 include "ContactElasticity"
 
@@ -12,37 +10,81 @@ real beta 	= 0.25;
 real gamma 	= 0.5;
 
 real T 		= 10;
-real MinGridSize = cCFL.min;
+real MinGridSize = [pCFL.min,cCFL.min].min;
 real dt 	= TimeStepSize(MinGridSize);
 real steps 	= T/dt;	
 
-problem BetaNewark([pxx,pyy],[pvi,pvj])
+real C0 = c0(dt,beta,gamma);
+real C1 = c1(dt,beta,gamma);
+real C2 = c2(dt,beta,gamma);
+real C3 = c3(dt,beta,gamma);
+real C4 = c4(dt,beta,gamma);
+real C5 = c5(dt,beta,gamma);
+
+problem NewarkP([pxx,pyy],[pvi,pvj])
 	= int2d(Ph)(
-              	c0(dt,beta,gamma)*M([pxx,pyy])+
+              	C0*M([pxx,pyy])+
 				K([pxx,pyy])
 				)
     - int2d(Ph)(
-				c0(dt,beta,gamma)*M([pxxo,pyyo]) + c1(dt,beta,gamma)*M([pvxo,pvyo]) + c2(dt,beta,gamma)*M([paxo,payo])+
+				C0*M([pxxo,pyyo]) + C1*M([pvxo,pvyo]) + C2*M([paxo,payo])+
 				g*pvj
-				//+Boundary Traction term
 				)
-    + on(bottom, pyy=0);
+	- int1d(Ph, top)(TractPx*pvi + TractPy*pvj)
+    + on(bottom, pyy=0)
+;
 
-problem BetaNewark([cxx,cyy],[cvi,cvj])
+problem NewarkC([cxx,cyy],[cvi,cvj])
 	= int2d(Ch)(
-              	c0(dt,beta,gamma)*M([cxx,cyy])+
+              	C0*M([cxx,cyy])+
 				K([cxx,cyy])
 				)
     - int2d(Ch)(
-				c0(dt,beta,gamma)*M([cxxo,cyyo]) + c1(dt,beta,gamma)*M([cvxo,cvyo]) + c2(dt,beta,gamma)*M([caxo,cayo])+
-				g*pvj
-				//+Boundary Traction term
-				);
+				C0*M([cxxo,cyyo]) + C1*M([cvxo,cvyo]) + C2*M([caxo,cayo])+
+				g*cvj
+				)
+	- int1d(Ch, circle)(TractCx*cvi + TractCy*cvj)
+;
+
+int[int] vtkorder = [1,1];
 
 for (int nt = 0; nt < steps; nt++){
-	
-	// Schwarz loop
-	
-	// Do plate contact check
 
+	bool ActiveContact = false;
+
+	while ( true ){
+		if ( ActiveContact ){
+			//Schwarz here
+		}
+		else{ 
+			NewarkP;
+			NewarkC;
+			}
+		Persistence = ActiveContact;
+		// Resolve the traction representation issue here!!! 
+		ActiveContact = ContactChecker(Ph, BPh, ContP, TracP, Ch, BCh, ContC, TracC); 
+		if ( Persistence == ActiveContact){break;}
+	}
+
+	//Save data
+	if (n%5==0){
+
+		// Block deformation
+		mesh Combined 	= Ph+Ch;
+		// Pressure and shear waves 
+		fespace Wh(Combined, P1);
+		Wh pw = dx(pxx)+dy(pyy) + dx(cxx)+dy(cyy);
+		Wh sw = dy(pxx)-dx(pyy) + dy(cxx)-dx(cyy);
+
+		if 		(n < 10) 	filenum = "000"	+n;
+		else if (n < 100) 	filenum = "00"	+n;
+		else if (n < 1000)	filenum = "0"   +n;
+		else 				filenum = n;
+	
+    	savevtk(outdir+"Contact"+filenum+".vtu", 
+				Combined, 
+				pw, sw, 
+				dataname="PressureWave ShearWave",
+				order=vtkorder);
+	}
 }
