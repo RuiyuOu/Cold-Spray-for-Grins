@@ -262,7 +262,7 @@ for (int nt = 0; nt < steps; nt++){
 		else if (nt < 1000)	filenum = "0"   +nt;
 		else 				filenum = nt;
 	
-    	savevtk(outdir+"Contact"+filenum+".vtu", 
+    	savevtk(outdir+"NContact"+filenum+".vtu", 
 				Combined, 
 				pw, sw, 
 				dataname="PressureWave ShearWave",
