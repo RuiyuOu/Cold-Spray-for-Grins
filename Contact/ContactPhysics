@@ -22,7 +22,7 @@ real ps = sqrt((lambda+2*mu));
 real ss = sqrt(mu);
 
 // Time and step sizes
-real T 		= 2;
+real T 		= 3;
 real MinGridSize = min(pCFL[].min,cCFL[].min);
 real dt 	= TimeStepSize(MinGridSize,max(ps,ss));
 real steps 	= T/dt;
@@ -43,19 +43,20 @@ real C4 = c4(dt,beta,gamma);
 real C5 = c5(dt,beta,gamma);
 
 // Schwarz DDM parameters
-int SchwarzIter = 25;
+int  SchwarzIter   = 10;
 real RelSchwarzTol = 1e-9;
 real AbsSchwarzTol = 1e-9;
 real errAbs;
 real errRel;
+int  SchwarzLoopStop  = 10;
 
 // Schwarz Robin parameters
 real alpha12 = 1e-3;
 real beta12  = 1.0;
 real alpha21 = 1e-3;
 real beta21  = 1.0;
-real theta1 = 1.0;
-real theta2 = 1.0;
+real theta1  = 1;
+real theta2  = 1;
 
 // Schwarz past iter data
 UhP [pxxPrev,pyyPrev];
@@ -71,12 +72,8 @@ problem NewarkP([pxx,pyy],[pvi,pvj])
 				C0*M([pxxo,pyyo],[pvi,pvj]) + C1*M([pvxo,pvyo],[pvi,pvj]) + C2*M([paxo,payo],[pvi,pvj])+
 				g*pvj
 				)
-	+ int1d(Ph, top)(
-					 ContP*(beta12/alpha12)*(pxx*pvi+pyy*pvj)
-					)
-	- int1d(Ph, top)(
-					 ContP*(1./alpha12)*(LambdaPx*pvi+LambdaPy*pvj)
-					)
+	+ int1d(Ph, top)(ContP*(beta12/alpha12)*(pxx*pvi+pyy*pvj))
+	- int1d(Ph, top)(ContP*(1./alpha12)*(LambdaPx*pvi+LambdaPy*pvj))
     + on(bottom, pyy=0)
 ;
 
@@ -89,61 +86,79 @@ problem NewarkC([cxx,cyy],[cvi,cvj])
 				C0*M([cxxo,cyyo],[cvi,cvj]) + C1*M([cvxo,cvyo],[cvi,cvj]) + C2*M([caxo,cayo],[cvi,cvj])+
 				g*cvj
 				)
-	+ int1d(Ch, circle)(
-						ContC*(beta21/alpha21)*(cxx*cvi+cyy*cvj)
-						)
-	- int1d(Ch, circle)(
-						ContC*(1./alpha21)*(LambdaCx*cvi+LambdaCy*cvj)
-						)
+	+ int1d(Ch, circle)(ContC*(beta21/alpha21)*(cxx*cvi+cyy*cvj))
+	- int1d(Ch, circle)(ContC*(1./alpha21)*(LambdaCx*cvi+LambdaCy*cvj))
 ;
 
-for (int nt = 0; nt < steps; nt++){
+varf MTop(u,v) = int1d(Ph, top)(u*v);
+matrix PMat = MTop(ShP, ShP);
+set(PMat, solver=CG, verb=false);
+varf MCirc(u,v) = int1d(Ch, circle)(u*v);
+matrix CMat = MCirc(ShC, ShC);
+set(CMat, solver=CG, verb=false);
 
-	bool ActiveContact = false;
+real EStart = int2d(Ph)(-g*y)+int2d(Ch)(-g*y);
+
+for (int nt = 0; nt < steps; nt++){
 
 	mesh PhDef = movemesh(Ph,[x+pxx,y+pyy]);
 	mesh ChDef = movemesh(Ch,[x+cxx,y+cyy]);
 
-	TractNP = TractPx*N.x + TractPy*N.y;
-	TractNC = TractCx*N.x + TractCy*N.y;
+	bool ActiveContact = ContactChecker(Persistence, PhDef, TractNP[], ChDef, TractNC[]);
+
+	varf VTnP(u,v) = int1d(Ph, top)( (TractPx*N.x + TractPy*N.y)*v );
+	varf VTnC(u,v) = int1d(Ch, circle)( (TractCx*N.x + TractCy*N.y)*v );
+	real[int] TnP = VTnP(0, ShP);
+	real[int] TnC = VTnC(0, ShC);
+	TractNP[] = PMat^-1 * TnP;
+	TractNC[] = CMat^-1 * TnC;
 
 	bool SchwarzLoop = true;
-	
 	int SchwarzLoopIters = 0;
-	int SchwarzLoopStop  = 10;
+
+	// FreeFEM indicator function works as follows
+	// chi(Mesh)(Point) = 1 if point is in mesh
+	// So ContP here is asking if the points in PhDef is in ChDef
 
 	while ( SchwarzLoop ){
 	  if ( ActiveContact ){
 	    cout << "Step #: " << nt << " contact detected." << endl;
-		for (int siters = 0; siters<SchwarzIter; siters++){
-		  // FreeFEM indicator function works as follows
-		  // chi(Mesh)(Point) = 1 if point is in mesh
-		  // So ContP here is asking if the points in PhDef is in ChDef
+		for (int siters = 0; siters<=SchwarzIter; siters++){
 		  ContP = chi(ChDef)(x+pxx,y+pyy);
 		  ContC = chi(PhDef)(x+cxx,y+cyy);
 
-		  TransPx = TractCx; TransPy = TractCy;
+		  TransPx = -TractCx; TransPy = -TractCy;
 		  DirPx = cxx; DirPy = cyy; 
 
 		  LambdaPx = theta1*(alpha12*TransPx + beta12*DirPx) + (1-theta1)*LambdaPx;
 		  LambdaPy = theta1*(alpha12*TransPy + beta12*DirPy) + (1-theta1)*LambdaPy;
 					
 		  NewarkP;
-			
-		  TractPx = (Elas*eps([pxx,pyy]))[0]*N.x + (0.5*Elas*eps([pxx,pyy]))[2]*N.y;
-		  TractPy = (0.5*Elas*eps([pxx,pyy]))[2]*N.x + (Elas*eps([pxx,pyy]))[1]*N.y;
+		
+		  // MT=V; T=M^-1V 
+		  // Must be done to have N.x make sense
+		  varf VTxP(u,v) = int1d(Ph, top)( ((Elas*eps([pxx,pyy]))[0]*N.x + (0.5*Elas*eps([pxx,pyy]))[2]*N.y)*v );
+		  varf VTyP(u,v) = int1d(Ph, top)( ((0.5*Elas*eps([pxx,pyy]))[2]*N.x + (Elas*eps([pxx,pyy]))[1]*N.y)*v );
+		  real[int] TxP = VTxP(0, ShP);
+		  real[int] TyP = VTyP(0, ShP);
+		  TractPx[] = PMat^-1 * TxP;
+		  TractPy[] = PMat^-1 * TyP;
 				
 		  // The new data have not been saved permanently yet so we can freely call it
-		  TransCx = TractPx; TransCy = TractPy;
+		  TransCx = -TractPx; TransCy = -TractPy;
 		  DirCx = pxx; DirCy = pyy; 
 				
 		  LambdaCx = theta2*(alpha21*TransCx + beta21*DirCx) + (1-theta2)*LambdaCx;
 		  LambdaCy = theta2*(alpha21*TransCy + beta21*DirCy) + (1-theta2)*LambdaCy;
-
+	
 		  NewarkC;
 
-		  TractCx = (Elas*eps([cxx,cyy]))[0]*N.x + (0.5*Elas*eps([cxx,cyy]))[2]*N.y;
-		  TractCy = (0.5*Elas*eps([cxx,cyy]))[2]*N.x + (Elas*eps([cxx,cyy]))[1]*N.y;
+		  varf VTxC(u,v) = int1d(Ch, circle)( ((Elas*eps([cxx,cyy]))[0]*N.x + (0.5*Elas*eps([cxx,cyy]))[2]*N.y)*v );
+		  varf VTyC(u,v) = int1d(Ch, circle)( ((0.5*Elas*eps([cxx,cyy]))[2]*N.x + (Elas*eps([cxx,cyy]))[1]*N.y)*v );
+		  real[int] TxC = VTxC(0, ShC);
+		  real[int] TyC = VTyC(0, ShC);
+		  TractCx[] = CMat^-1 * TxC;
+		  TractCy[] = CMat^-1 * TyC;
 
 		  errAbs = sqrt( int2d(Ph)((pxx-pxxPrev)^2+(pyy-pyyPrev)^2)
 			           + int2d(Ch)((cxx-cxxPrev)^2+(cyy-cyyPrev)^2) );
@@ -176,15 +191,16 @@ for (int nt = 0; nt < steps; nt++){
 	  }
 	  PhDef = movemesh(Ph,[x+pxx,y+pyy]);
 	  ChDef = movemesh(Ch,[x+cxx,y+cyy]);
-	  TractNP = TractPx*N.x + TractPy*N.y;
-	  TractNC = TractCx*N.x + TractCy*N.y;
-	  cout << "update persistence" << endl;
-	  cout << "Persistence " << Persistence << endl;
-	  cout << "Active Contact " << ActiveContact <<endl;
+
+	  varf VTnP(u,v) = int1d(Ph, top)( (TractPx*N.x + TractPy*N.y)*v );
+	  varf VTnC(u,v) = int1d(Ch, circle)( (TractCx*N.x + TractCy*N.y)*v );
+	  real[int] TnP = VTnP(0, ShP);
+	  real[int] TnC = VTnC(0, ShC);
+	  TractNP[] = PMat^-1 * TnP;
+	  TractNC[] = CMat^-1 * TnC;
+
 	  Persistence = ActiveContact;
-	  cout << "Persistence " << Persistence << endl;
 	  ActiveContact = ContactChecker(Persistence, PhDef, TractNP[], ChDef, TractNC[]); 
-	  cout << "Active Contact " << ActiveContact <<endl;
 	  SchwarzLoopIters++;
 	  if ( Persistence == ActiveContact){SchwarzLoop=false;}
 	  if ( SchwarzLoopIters>=SchwarzLoopStop){SchwarzLoop=false;
@@ -225,9 +241,17 @@ for (int nt = 0; nt < steps; nt++){
 
 	//Save data
 	if (nt%5==0){
-
+		
 		// Block deformation
 		mesh Combined 	= PhDef+ChDef;
+
+		real KE = 0.5*int2d(Ph)([pvx,pvy]'*[pvx,pvy])+0.5*int2d(Ch)([cvx,cvy]'*[cvx,cvy]);
+		real PE = int2d(Combined)(-g*y);
+		real EE = 0.5*int2d(Ph)(eps([pxx,pyy])'*Elas*eps([pxx,pyy]))+0.5*int2d(Ch)(eps([cxx,cyy])'*Elas*eps([cxx,cyy]));
+
+		cout << "Estart " << EStart
+		<< "KE+PE+EE " << KE+EE+PE << endl;
+
 		// Pressure and shear waves 
 		fespace Wh(Combined, P1);
 		Wh pw = dx(pxx)+dy(pyy) + dx(cxx)+dy(cyy);

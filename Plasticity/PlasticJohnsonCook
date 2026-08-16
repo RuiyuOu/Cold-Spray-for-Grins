@@ -66,7 +66,7 @@ func real Newton(real vmTrial, real epsEqOld, real Told)
   		real Tguess  = Told + TempGen(epsEqOld+dg, dg, Told, dt);
     	real sY      = SigmaY(epsEqOld+dg, epsRate, Tguess);
     	real R       = vmTrial - 3.*mu*dg - sY;
-    	if (abs(R) < 1.0e-6*newttol) break;
+    	if (abs(R) < newttol) break;
 
     	real h        = max(dg*1.0e-6, 1.0e-12);
     	real epsRateh = (dg+h)/dt;
@@ -90,6 +90,49 @@ for ( int nt = 0; nt < steps; nt++ ){
 
 	Newark;
 
+	ElEpsXXt= eps([xx,yy])[0]-eps([xxo,yyo])[0];
+	ElEpsYYt= eps([xx,yy])[1]-eps([xxo,yyo])[1];
+	ElEpsZZt= 0;
+	ElEpsXYt= eps([xx,yy])[2]-eps([xxo,yyo])[2];
+	Trace 	= ThreeTrace([ElEpsXXt,ElEpsYYt,ElEpsZZt,ElEpsXYt]);
+	SigXXt 	= SigXX + lambda*Trace+2.*mu*ElEpsXXt;
+	SigYYt	= SigYY + lambda*Trace+2.*mu*ElEpsYYt;
+	SigZZt	= SigZZ + lambda*Trace+2.*mu*ElEpsZZt;
+	SigXYt	= SigXY + mu*ElEpsXYt;
+	p 		= (SigXXt+SigYYt+SigZZt)/3.;
+	DevXXt  = Dev(p,[SigXXt,SigYYt,SigZZt,SigXYt])[0];
+	DevYYt	= Dev(p,[SigXXt,SigYYt,SigZZt,SigXYt])[1];
+	DevZZt	= Dev(p,[SigXXt,SigYYt,SigZZt,SigXYt])[2];
+	DevXYt	= Dev(p,[SigXXt,SigYYt,SigZZt,SigXYt])[3];
+	SigVMt	= SigmaVM([DevXXt,DevYYt,DevZZt,DevXYt]);
+	
+	for (int i = 0; i < Sh.ndof; i++){
+		real DelG=0; 
+
+		if (YieldFunc(SigVMt[][i],EqPlEps[][i],0,Temp[][i])>YieldFuncTol){
+			DelG = Newton(SigVMt[][i], EqPlEps[][i], Temp[][i]);
+		}
+		
+		EqPlEps[][i] += DelG;
+		DevXX[][i]	 = (1.- 3.*mu*DelG/SigVMt[][i])*DevXXt[][i];
+		DevYY[][i]	 = (1.- 3.*mu*DelG/SigVMt[][i])*DevYYt[][i];
+		DevZZ[][i]	 = (1.- 3.*mu*DelG/SigVMt[][i])*DevZZt[][i];
+		DevXY[][i]	 = (1.- 3.*mu*DelG/SigVMt[][i])*DevXYt[][i];
+		real[int] sn = [DevXX[][i], DevYY[][i], DevZZ[][i], DevXY[][i]];
+		real factor = 1.5*DelG/SigVMt[][i];
+		PlEpsXX[][i] += factor*sn[0];
+		PlEpsYY[][i] += factor*sn[1];
+		PlEpsZZ[][i] += factor*sn[2];
+		PlEpsXY[][i] += 2*factor*sn[3];
+		// I think this is still heating up too much. 
+		// There is not enough starting kinetic energy to generate all the heat so far.
+		Temp[][i] 	 += TempGen(EqPlEps[][i], DelG, Temp[][i], dt);
+		SigXX[][i]	 = p[][i] + DevXX[][i];
+		SigYY[][i]	 = p[][i] + DevYY[][i];
+		SigZZ[][i]	 = p[][i] + DevZZ[][i];
+		SigXY[][i]	 = DevXY[][i];
+	}
+	
 	// Carry over
     // New acceleration from Newmark
     // uan = c0*(x_i+1 - x_i) - c1*vxo - c2*axo
@@ -111,60 +154,20 @@ for ( int nt = 0; nt < steps; nt++ ){
     xxo[] = xx[];
 	vxo[] = vx[];
 	axo[] = ax[];
-
-	ElEpsXXt= eps([xx,yy])[0]-PlEpsXX;
-	ElEpsYYt= eps([xx,yy])[1]-PlEpsYY;
-	ElEpsZZt= 0-PlEpsZZ;
-	ElEpsXYt= eps([xx,yy])[2]-PlEpsXY;
-	Trace 	= ThreeTrace([ElEpsXXt,ElEpsYYt,ElEpsZZt,ElEpsXYt]);
-	p		= (lambda+2/3*mu)*Trace; // it has sum of 2muSig_ii in hydrostatic
-	SigXXt 	= lambda*Trace+2*mu*ElEpsXXt;
-	SigYYt	= lambda*Trace+2*mu*ElEpsYYt;
-	SigZZt	= lambda*Trace+2*mu*ElEpsZZt;
-	SigXYt	= mu*ElEpsXYt;
-	DevXXt  = Dev(p,[SigXXt,SigYYt,SigZZt,SigXYt])[0];
-	DevYYt	= Dev(p,[SigXXt,SigYYt,SigZZt,SigXYt])[1];
-	DevZZt	= Dev(p,[SigXXt,SigYYt,SigZZt,SigXYt])[2];
-	DevXYt	= Dev(p,[SigXXt,SigYYt,SigZZt,SigXYt])[3];
-	SigVMt	= SigmaVM([DevXXt,DevYYt,DevZZt,DevXYt]);
-	
-	for (int i = 0; i < Sh.ndof; i++){
-		real DelG=0; 
-
-		if (YieldFunc(SigVMt[][i],EqPlEps[][i],0,Temp[][i])>YieldFuncTol){
-			DelG = Newton(SigVMt[][i], EqPlEps[][i], Temp[][i]);
-		}
-		
-		EqPlEps[][i] += DelG;
-		DevXX[][i]	 = (1.- 3.*mu*DelG/SigVMt[][i])*DevXXt[][i];
-		real[int] sn = [DevXX[][i], DevYY[][i], DevZZ[][i], DevXY[][i]];
-		real factor = 1.5*DelG/SigVMt[][i];
-		PlEpsXX[][i] += factor*sn[0];
-		PlEpsYY[][i] += factor*sn[1];
-		PlEpsZZ[][i] += factor*sn[2];
-		PlEpsXY[][i] += factor*sn[3];
-		// I think this is still heating up too much. 
-		// There is not enough starting kinetic energy to generate all the heat so far.
-		Temp[][i] 	 += TempGen(EqPlEps[][i], DelG, Temp[][i], dt);
-		SigXX[][i]	 = p[][i] + DevXX[][i];
-		SigYY[][i]	 = p[][i] + DevYY[][i];
-		SigZZ[][i]	 = p[][i] + DevZZ[][i];
-		SigXY[][i]	 = DevXY[][i];
-	}
-
 	if (nt%3==0){
 		
 		real KE = 0.5*rho*int2d(Ph)([vx,vy]'*[vx,vy]);
 		real EE = 0.5*int2d(Ph)([SigXX,SigYY,SigXY]'*(eps([xx,yy])-[PlEpsXX,PlEpsYY,PlEpsXY]));
 		real TE = rho*Cp*int2d(Ph)(Temp-T0);
-		real TENorm = TE/0.9;
-
+		real PE = B/(nJC+1)*int2d(Ph)(EqPlEps^(nJC+1));
+		
 		cout << "Energy Start" << EStart
        	<< "   KE+EE+TE " << KE+EE+TE << endl;
 
 		cout << "Kinetic" << KE
        	<< "   Elastic" << EE
-       	<< "   Thermal" << TE << endl;
+       	<< "   Thermal" << TE 
+		<< "   Plastic" << PE << endl;
 	
 		// Block deformation
 		mesh PhDeformed = movemesh(Ph, [x+xx, y+yy]);

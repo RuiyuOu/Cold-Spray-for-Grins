@@ -13,12 +13,15 @@ border S1(t=0,1){ x=scale*(6*t);   y=0;   label=bottom; }
 border S2(t=0,1){ x=scale*6;   y=scale*2*t;   label=right; }
 border S3(t=0,1){ x=scale*(6-6*t); y=scale*2;   label=top; }
 border S4(t=0,1){ x=0;   y=scale*(2-2*t); label=left; }
-border S5(t=0,2*3.14159265){x=scale*(2.65+0.5*cos(t)); y=scale*(3+0.5*sin(t)); label=circle1;}
-border S6(t=0,2*3.14159265){x=scale*(3.35+0.5*cos(t)); y=scale*(4.5+0.5*sin(t)); label=circle2;}
+border S5(t=0,2*3.14159265){x=scale*(2.65+0.5*cos(t)); y=scale*(2.6+0.5*sin(t)); label=circle1;}
+border S6(t=0,2*3.14159265){x=scale*(3.35+0.5*cos(t)); y=scale*(3.7+0.5*sin(t)); label=circle2;}
 
 mesh Ph = buildmesh(S1(5*nn)+S2(nn)+S3(5*nn)+S4(nn));
 mesh C1h = buildmesh(S5(3*nn));
 mesh C2h = buildmesh(S6(3*nn));
+
+//mesh Kh = Ph + C1h + C2h;
+//plot(Kh);
 
 // Vector spaces
 fespace UhP(Ph,[P1,P1]);
@@ -89,7 +92,7 @@ ShC2 LambdaC2x, LambdaC2y;
 ShC2 TractNC2;
 ShC2 c2EqPlEps;
 ShC2 c2P;
-ShC2 c2SigVM, c1SigVMt;
+ShC2 c2SigVM, c2SigVMt;
 ShC2 c2Temp;
 ShC2 c2Trace;
 ShC2 c2DevXX, c2DevYY, c2DevZZ, c2DevXY;

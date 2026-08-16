@@ -4,7 +4,7 @@ real T0    	= 300.;		// Starting temp
 real TQ  	= 0.9;		// Taylor-Quincy Heat fraction
 real dEps0 	= 1.0;   	// Reference strain rate
 // ----------------------- Material Properties -----------------------
-// Copper
+// --- Copper --- 
 real rhoC  	= 8960.; 	// Density
 real EC    	= 117e9; 	// Young's modulus
 real nuC   	= 0.34;  	// Poisson modulus
@@ -15,59 +15,75 @@ real CC    	= 0.025;  	// Johnson-Cook rate parameter
 real mC    	= 1.09;   	// Johnson-Cook thermal exponent
 real TmC   	= 1356.;  	// Melting temp
 real CpC   	= 385.;		// Specific heat
-// Aluminium
-real rhoA  = 2700.;
-real EA    = 70e9;
-real nuA   = 0.33;
-real AA    = 110e6;
-real BA    = 150e6;
-real nJCA  = 0.36;
-real CA    = 0.001;
-real TmA   = 933.;
-real CpA   = 900.;
+real lambdaC= EC*nuC/((1.+nuC)*(1.-2.*nuC)); 	// Lame parameter: Pa
+real muC 	= EC/(2.*(1.+nuC));				// Lame parameter: Pa
+// --- Aluminium --- 
+real rhoA   = 2700.;
+real EA     = 70e9;
+real nuA    = 0.33;
+real AA     = 110e6;
+real BA     = 150e6;
+real nJCA   = 0.36;
+real CA     = 0.001;
+real mA     = 1.34;
+real TmA    = 933.;
+real CpA    = 900.;
+real lambdaA= EA*nuA/((1.+nuA)*(1.-2.*nuA));
+real muA 	= EA/(2.*(1.+nuA));
+// --- Elastic tensor --- 
+func CElas = [[2*muC+lambdaC,	lambdaC, 		0. ], 
+			 [lambdaC,		2*muC+lambdaC, 	0. ],
+			 [ 0. , 		0. , 			muC ]];
+func AElas = [[2*muA+lambdaA,	lambdaA, 		0. ], 
+			 [lambdaA,		2*muA+lambdaA, 	0. ],
+			 [ 0. , 		0. , 			muA ]];
+// --- Wave speeds --- 
+real cPS = sqrt((lambdaC+2*muC)/rhoC);
+real cSS = sqrt(muC/rhoC);
+real aPS = sqrt((lambdaA+2*muA)/rhoA);
+real aSS = sqrt(muA/rhoA);
 // ----------------------- Macros -----------------------
-// Newark Macros
+// --- Newark Macros --- 
 macro M(a,p) (a[0]*p[0]+a[1]*p[1]) //
-macro K(a,p) (eps(a)'*Elas*eps(p)) //
-// Divergence
+// --- Divergence --- 
 macro div(v) (dx(v[0])+dy(v[1])) // 	
-// Strain vector
+// --- Strain vector --- 
 macro eps(v) ([dx(v[0]),dy(v[1]),dy(v[0])+dx(v[1])]) //
-// Stress vector
+// --- Stress vector --- 
 macro Sigma(v) (Elas*eps(v)) //
-// Deviatoric Stress
+// --- Deviatoric Stress --- 
 macro Dev(p,v) ([v[0]-p, v[1]-p, v[2]-p, v[3]]) //
-// von Mises Stress
+// --- von Mises Stress --- 
 macro SigmaVM(DevStress) (sqrt(1.5*(DevStress[0]^2+DevStress[1]^2+DevStress[2]^2+2.*DevStress[3]^2))) //
-// Trace of a 3x3 matrix in the Voight notation used consistently here
+// --- Trace of a 3x3 matrix in the Voight notation used consistently here --- 
 macro ThreeTrace(v) (v[0]+v[1]+v[2]) //
 // ----------------------- Universal Functions -----------------------
-// Newark constants
+// --- Newark constants --- 
 func real c0(real dt, real beta, real gamma){return 1./(beta*dt*dt);}
 func real c1(real dt, real beta, real gamma){return 1./(beta*dt);}
 func real c2(real dt, real beta, real gamma){return 1./(2.*beta) - 1.;}
 func real c3(real dt, real beta, real gamma){return gamma/(beta*dt);}
 func real c4(real dt, real beta, real gamma){return gamma/beta - 1.;}
 func real c5(real dt, real beta, real gamma){return dt*(gamma/(2*beta) - 1.);}
-// Time step size
+// --- Time step size --- 
 func real TimeStepSize(real GridSize, real Velocity){
 	return GridSize/Velocity;}
 // ----------------------- Contact Functions -----------------------
-// Evaluate if the traction stress is compressive
+// --- Evaluate if the traction stress is compressive --- 
 real CompTol = 0;
 func bool Compression(real[int] &Tract){
 	return (Tract.min < -CompTol);}
-// Evaluate if 2 blocks are actively overlapping
+// --- Evaluate if 2 blocks are actively overlapping --- 
 real OverlapTol = 1e-8;
 func bool Overlap(mesh &Th1, mesh &Th2){
 	return (int2d(Th1)(chi(Th2)(x,y))+int2d(Th2)(chi(Th1)(x,y)) > OverlapTol);}
-// Boolean to identify active contact between bodies
+// --- Boolean to identify active contact between bodies --- 
 func bool ContactChecker(bool Pers, mesh &Th1Def, real[int] &Tract1,
                           mesh &Th2Def, real[int] &Tract2){
 	if (Pers){return (Compression(Tract1) || Compression(Tract2));}
 	else {return Overlap(Th1Def,Th2Def);}}
 // ----------------------- Plasticity Functions -----------------------
-// Johnson-Cook Yield Stress
+// --- Johnson-Cook Yield Stress --- 
 func real SigmaY(real A, real B, real nJC, real C, real Eps, real dEps, real T, real Tm, real m){
 	real rateRatio  = max(dEps/dEps0, 1.0);
   	real theta      = min((T-T0)/(Tm-T0), 1.0);
@@ -75,9 +91,63 @@ func real SigmaY(real A, real B, real nJC, real C, real Eps, real dEps, real T, 
   	real Rate       = 1.0 + C*log(rateRatio);
   	real Therm      = 1.0 - theta^m;
   	return Hard*Rate*Therm;}
-// Yield Function
+// --- Yield Function --- 
 func real YieldFunc(real vonMises, real A, real B, real nJC, real C, real Eps, real dEps, real T, real Tm, real m){
 	return vonMises-SigmaY(A,B,nJC,C,Eps,dEps,T,Tm,m);}
-// Temperature Generated
+// --- Temperature Generated --- 
 func real TempGen(real rho, real A, real B, real nJC, real C, real Eps, real dEps, real T, real Tm, real m, real TQ, real Cp){
 	return TQ/rho/Cp*dEps*SigmaY(A,B,nJC,C,Eps,dEps,T,Tm,m);}
+// --- Plasticity Build Field --- 
+func real[int] PlasticBuildTrial
+(real[int] &xx, real[int] &yy, real[int] &Trace, real[int] &p, real[int] &SigVMt,
+real[int] &PlEpsXX, real[int] &PlEpsYY, real[int] &PlEpsZZ, real[int] &PlEpsXY, 
+real[int] &ElEpsXXt, real[int] &ElEpsYYt, real[int] &ElEpsZZt, real[int] &ElEpsXYt, 
+real[int] &SigXXt, real[int] &SigYYt, real[int] &SigZZt, real[int] &SigXYt, 
+real[int] &DevXXt, real[int] &DevYYt, real[int] &DevZZt, real[int] &DevXYt, 
+real lambda, real mu){
+	ElEpsXXt= eps([xx,yy])[0]-PlEpsXX;
+	ElEpsYYt= eps([xx,yy])[1]-PlEpsYY;
+	ElEpsZZt= 0-PlEpsZZ;
+	ElEpsXYt= eps([xx,yy])[2]-PlEpsXY;
+	Trace 	= ThreeTrace([ElEpsXXt,ElEpsYYt,ElEpsZZt,ElEpsXYt]);
+	p		= (lambda+2./3.*mu)*Trace; // it has sum of 2muSig_ii in hydrostatic
+	SigXXt 	= lambda*Trace+2.*mu*ElEpsXXt;
+	SigYYt	= lambda*Trace+2.*mu*ElEpsYYt;
+	SigZZt	= lambda*Trace+2.*mu*ElEpsZZt;
+	SigXYt	= mu*ElEpsXYt;
+	DevXXt  = Dev(p,[SigXXt,SigYYt,SigZZt,SigXYt])[0];
+	DevYYt	= Dev(p,[SigXXt,SigYYt,SigZZt,SigXYt])[1];
+	DevZZt	= Dev(p,[SigXXt,SigYYt,SigZZt,SigXYt])[2];
+	DevXYt	= Dev(p,[SigXXt,SigYYt,SigZZt,SigXYt])[3];
+	SigVMt	= SigmaVM([DevXXt,DevYYt,DevZZt,DevXYt]);
+return ElEpsXXt,ElEpsYYt,ElEpsZZt,ElEpsXYt,Trace,p,SigXXt,SigYYt,SigZZt,SigXYt,DevXXt,DevYYt,DevZZt,DevXYt,SigVMt;}
+// --- Plasticity Solve ---
+func real[int] PlasticSolve(mesh &Th, real[int] &EqPlEps, real[int]SigVMt, real[int] &Temp,
+real[int] &DevXXt, real[int] &DevYYt, real[int] &DevZZt, real[int] &DevXYt, 
+real[int] &DevXX, real[int] &DevYY, real[int] &DevZZ, real[int] &DevXY,
+real[int] &SigXX, real[int] &SigYY, real[int] &SigZZ, real[int] &SigXY  ){
+for (int i = 0; i < Th.ndof; i++){
+	real DelG=0; 
+
+	if (YieldFunc(SigVMt[][i],EqPlEps[][i],0,Temp[][i])>YieldFuncTol){
+		DelG = Newton(SigVMt[][i], EqPlEps[][i], Temp[][i]);
+	}
+		
+	EqPlEps[][i] += DelG;
+	DevXX[][i]	 = (1.- 3.*mu*DelG/SigVMt[][i])*DevXXt[][i];
+	DevYY[][i]	 = (1.- 3.*mu*DelG/SigVMt[][i])*DevXXt[][i];
+	DevZZ[][i]	 = (1.- 3.*mu*DelG/SigVMt[][i])*DevXXt[][i];
+	DevXY[][i]	 = (1.- 3.*mu*DelG/SigVMt[][i])*DevXXt[][i];
+	real[int] sn = [DevXX[][i], DevYY[][i], DevZZ[][i], DevXY[][i]];
+	real factor = 1.5*DelG/SigVMt[][i];
+	PlEpsXX[][i] += factor*sn[0];
+	PlEpsYY[][i] += factor*sn[1];
+	PlEpsZZ[][i] += factor*sn[2];
+	PlEpsXY[][i] += 2*factor*sn[3];
+	Temp[][i] 	 += TempGen(EqPlEps[][i], DelG, Temp[][i], dt);
+	SigXX[][i]	 = p[][i] + DevXX[][i];
+	SigYY[][i]	 = p[][i] + DevYY[][i];
+	SigZZ[][i]	 = p[][i] + DevZZ[][i];
+	SigXY[][i]	 = DevXY[][i];
+return EqPlEps,PlEpsXX,PlEpsYY,PlEpsZZ,PlEpsXY,Temp,SigXX,SigYY,SigZZ,SigXY;
+}

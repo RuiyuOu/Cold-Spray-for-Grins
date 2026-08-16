@@ -16,7 +16,7 @@ mesh Ph = buildmesh(S1(5*nn)+S2(nn)+S3(5*nn)+S4(nn));
 mesh Ch = buildmesh(S5(3*nn));
 
 // Vector spaces
-fespace UhP(Ph,[P1,P1]);
+fespace UhP(Ph,[P2,P2]);
 UhP [pxx,pyy];
 UhP [pxxo,pyyo];
 UhP [pvx,pvy];
@@ -24,7 +24,7 @@ UhP [pvxo,pvyo];
 UhP [pax,pay];
 UhP [paxo,payo];
 UhP [pvi,pvj];
-fespace UhC(Ch,[P1,P1]);
+fespace UhC(Ch,[P2,P2]);
 UhC [cxx,cyy];
 UhC [cxxo,cyyo];
 UhC [cvx,cvy];

@@ -1,0 +1,167 @@
+// Al plate, Cu particle
+load "iovtk"
+include "ColdSprayGeometry"
+include "ColdSprayParameters"
+
+// ------------------------ Dir Path ------------------------ 
+string outdir = "..//ColdSpray//results//";
+string filenum;
+int[int] vtkorder = [1,1,1,1];
+
+// ------------------------ Time step ------------------------ 
+real T 		= 50e-9;
+real pMinGridSize = pCFL[].min;
+real c1MinGridSize= c1CFL[].min;
+real dt 	= min(TimeStepSize(pMinGridSize,min(aPS,aSS)),
+				  TimeStepSize(c1MinGridSize,min(cPS,cSS)));
+real steps 	= T/dt;	
+
+// ------------------------ Schwarz DDM parameters ------------------------ 
+int  SchwarzIter   = 10;
+real RelSchwarzTol = 1e-9;
+real AbsSchwarzTol = 1e-9;
+real errAbs;
+real errRel;
+real alphaPC1 = 1e-3;
+real betaPC1  = 1.0;
+real alphaC1P = 1e-3;
+real betaC1P  = 1.0;
+real thetaP  = 1;
+real thetaC1  = 1;
+UhP [pxxPrev,pyyPrev];
+UhC1 [c1xxPrev,c1yyPrev];
+bool Persistence = false; 
+
+// ------------------------ Plasticity Newton Solve Parameters ------------------------ 
+int  newtiters 	= 25;
+real newttol 	= 1e-9;
+real YieldFuncTol 	= 0;
+real itertol	= 1e-9; 
+
+// ------------------------ Newark parameters ------------------------ 
+real gamma 	= 0.9;
+real beta 	= 0.25*(0.5+gamma)^2;
+
+// ------------------------ Newark constants ------------------------ 
+real C0 = c0(dt,beta,gamma);
+real C1 = c1(dt,beta,gamma);
+real C2 = c2(dt,beta,gamma);
+real C3 = c3(dt,beta,gamma);
+real C4 = c4(dt,beta,gamma);
+real C5 = c5(dt,beta,gamma);
+
+// ------------------------ Newton-Raphson ------------------------ 
+func real Newton(real vmTrial, real epsEqOld, real Told, real dt, real mu)
+{real dg = 0;
+// --- Start For : Newton --- 
+for (int it = 0; it < newtiters; it++){
+real epsRate = dg/dt;
+real Tguess  = Told + TempGen(epsEqOld+dg, dg, Told, dt);
+real sY      = SigmaY(epsEqOld+dg, epsRate, Tguess);
+real R       = vmTrial - 3.*mu*dg - sY;
+if (abs(R) < newttol){break};
+
+real h        = max(dg*1.0e-6, 1.0e-12);
+real epsRateh = (dg+h)/dt;
+real Tguessh  = Told + TempGen(epsEqOld+dg+h, dg+h, Told, dt);
+real sYh      = SigmaY(epsEqOld+dg+h, epsRateh, Tguessh);
+real Rh       = vmTrial - 3.*mu*(dg+h) - sYh;
+
+real dRdg = (Rh-R)/h;
+if (abs(dRdg) < 1.0e-20){break};
+
+real dgNew = dg - R/dRdg;
+if (dgNew < 0.0) dgNew = 0.0;
+dg = dgNew;
+if(it==newtiters){cout << "Newton iteration limit reached" << endl};
+} // --- End For : Newton --- 
+return dg;}
+// --- End Newton --- 
+
+// ------------------------ Newark Integrators ------------------------ 
+problem NewarkP([pxx,pyy],[pvi,pvj])
+	= int2d(Ph)(
+              	C0*M([pxx,pyy],[pvi,pvj])+
+				eps([pxx,pyy])'*AElas*eps([pvi,pvj])
+				)
+    - int2d(Ph)(
+				C0*M([pxxo,pyyo],[pvi,pvj]) + C1*M([pvxo,pvyo],[pvi,pvj]) + C2*M([paxo,payo],[pvi,pvj])+
+				eps([pxxo,pyyo])'*AElas*eps([pvi,pvj])
+				)
+	+ int2d(Ph)([pSigXX,pSigYY,pSigXY]'*eps([pxx,pyy]))
+	+ int1d(Ph, top)(ContPC1*(betaPC1/alphaPC1)*(pxx*pvi+pyy*pvj))
+	- int1d(Ph, top)(ContPC1*(1./alphaPC1)*(LambdaPx*pvi+LambdaPy*pvj))
+    + on(bottom, pyy=0);
+
+problem NewarkC([c1xx,c1yy],[c1vi,c1vj])
+	= int2d(C1h)(
+              	C0*M([c1xx,c1yy],[c1vi,c1vj])+
+				eps([c1xx,c1yy])'*CElas*eps([c1vi,c1vj])
+				)
+    - int2d(C1h)(
+				C0*M([c1xxo,c1yyo],[c1vi,c1vj]) + C1*M([c1vxo,c1vyo],[c1vi,c1vj]) + C2*M([c1axo,c1ayo],[c1vi,c1vj])+
+				eps([c1xxo,c1yyo])'*CElas*eps([c1vi,c1vj])
+				)
+	+ int2d(C1h)([c1SigXX,c1SigYY,c1SigXY]'*eps([c1xx,c1yy]))
+	+ int1d(C1h, circle1)(ContC1P*(betaC1P/alphaC1P)*(c1xx*c1vi+c1yy*c1vj))
+	- int1d(C1h, circle1)(ContC1P*(1./alphaC1P)*(LambdaC1x*c1vi+LambdaC1y*c1vj));
+
+// ------------------------ Projection Matrices ------------------------ 
+varf MTop(u,v) = int1d(Ph, top)(u*v);
+matrix PMat = MTop(ShP, ShP);
+set(PMat, solver=CG, verb=false);
+varf MCirc1(u,v) = int1d(C1h, circle1)(u*v);
+matrix CMat = MCirc1(ShC1, ShC1);
+set(CMat, solver=CG, verb=false);
+
+// ------------------------ Initialize ------------------------ 
+pxx[]=0; pxxo[]=0;pvx[]=0;pvxo[]=0;pax[]=0;paxo[]=0;
+pEqPlEps=0;pP=0;pSigVM=0; pTemp=T0;
+c1xx[]=0;c1xxo[]=0;[c1vx,c1vy]=[vimp,0];[c1vxo,c1vyo]=[vimp,0];c1ax[]=0;c1axo[]=0;
+c1EqPlEps=0;c1P=0;c1SigVM=0; c1Temp=T0;
+
+// ------------------------ Energy Conservation Metric ------------------------ 
+real Estart = 0.5*rhoC*int2d(C1h)([c1vx,c1vy]'*[c1vx,c1vy]);
+
+// ------------------------ Start Time Loop ------------------------ 
+for (int nt = 0; nt < steps; nt++){
+
+// ------------------------ Contact ------------------------ 
+
+
+
+// ------------------------ Save data ------------------------ 
+if (nt%3==0){
+		
+	real KE = 0.5*rhoA*int2d(Ph)([pvx,pvy]'*[pvx,pvy])+0.5*rhoC*int2d(C1h)([c1vx,c1vy]'*[c1vx,c1vy]);
+	real EE = 0.5*int2d(Ph)([pSigXX,pSigYY,pSigXY]'*(eps([pxx,pyy])-[pPlEpsXX,pPlEpsYY,pPlEpsXY]));
+	real TE = rhoA*CpA*int2d(Ph)(pTemp-T0)+rhoC*CpC*int2d(C1h)(pTemp-T0);
+
+	cout << "Energy Start" << Estart
+    << "   KE+EE+TE " << KE+EE+TE << endl;
+
+	cout << "Kinetic" << KE
+    << "   Elastic" << EE
+    << "   Thermal" << TE << endl;
+	
+	// Block deformation
+	mesh Combined = PhDef+C1hDef;
+	// Pressure and shear waves 
+	fespace Wh(Combined,P1);
+	Wh pw = dx(pxx)+dy(pyy) + dx(c1xx)+dy(c1yy);
+	Wh sw = dy(pxx)-dx(pyy) + dy(c1xx)-dx(c1yy);
+	Wh SigVM = SigmaVM([pDevXX,pDevYY,pDevZZ,pDevXY]) + SigmaVM([c1DevXX,c1DevYY,pDevZZ,pDevXY]);
+	Wh Temp = pTemp +c1Temp;
+		
+	if 		(nt < 10) 	filenum = "000"	+nt;
+	else if (nt < 100) 	filenum = "00"	+nt;
+	else if (nt < 1000)	filenum = "0"   +nt;
+	else 				filenum = nt;
+	
+    savevtk(outdir+"ColdSprayOne"+filenum+".vtu", 
+			Combined, 
+			pw, sw, SigVM, Temp,
+			dataname="PressureWave ShearWave vonMisesStress Temperature",
+			order=vtkorder);
+}// --- End Save Data If ---
+}// --- End Time loop ---
