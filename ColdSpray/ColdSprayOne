@@ -35,7 +35,7 @@ problem NewarkP([pxx,pyy],[pvi,pvj])
 				C0*M([pxxo,pyyo],[pvi,pvj]) + C1*M([pvxo,pvyo],[pvi,pvj]) + C2*M([paxo,payo],[pvi,pvj])+
 				eps([pxxo,pyyo])'*AElas*eps([pvi,pvj])
 				)
-	+ int2d(Ph)([pSigXX,pSigYY,pSigXY]'*eps([pxx,pyy]))
+	+ int2d(Ph)([pSigXX,pSigYY,pSigXY]'*eps([pvi,pvj]))
 	+ int1d(Ph, top)(ContPC1*(betaPC1/alphaPC1)*(pxx*pvi+pyy*pvj))
 	- int1d(Ph, top)(ContPC1*(1./alphaPC1)*(LambdaPx*pvi+LambdaPy*pvj))
     + on(bottom, pyy=0);
@@ -49,7 +49,7 @@ problem NewarkC1([c1xx,c1yy],[c1vi,c1vj])
 				C0*M([c1xxo,c1yyo],[c1vi,c1vj]) + C1*M([c1vxo,c1vyo],[c1vi,c1vj]) + C2*M([c1axo,c1ayo],[c1vi,c1vj])+
 				eps([c1xxo,c1yyo])'*CElas*eps([c1vi,c1vj])
 				)
-	+ int2d(C1h)([c1SigXX,c1SigYY,c1SigXY]'*eps([c1xx,c1yy]))
+	+ int2d(C1h)([c1SigXX,c1SigYY,c1SigXY]'*eps([c1vi,c1vj]))
 	+ int1d(C1h, circle1)(ContC1P*(betaC1P/alphaC1P)*(c1xx*c1vi+c1yy*c1vj))
 	- int1d(C1h, circle1)(ContC1P*(1./alphaC1P)*(LambdaC1x*c1vi+LambdaC1y*c1vj));
 
@@ -64,7 +64,7 @@ set(C1Mat, solver=CG, verb=false);
 // ------------------------ Initialize ------------------------ 
 pxx[]=0; pxxo[]=0;pvx[]=0;pvxo[]=0;pax[]=0;paxo[]=0;
 pEqPlEps=0;pP=0;pSigVM=0; pTemp=T0;
-c1xx[]=0;c1xxo[]=0;[c1vx,c1vy]=[vimp,0];[c1vxo,c1vyo]=[vimp,0];c1ax[]=0;c1axo[]=0;
+c1xx[]=0;c1xxo[]=0;[c1vx,c1vy]=[0,vimp];[c1vxo,c1vyo]=[0,vimp];c1ax[]=0;c1axo[]=0;
 c1EqPlEps=0;c1P=0;c1SigVM=0; c1Temp=T0;
 // ------------------------ Energy Conservation Metric ------------------------ 
 real Estart = 0.5*rhoC*int2d(C1h)([c1vx,c1vy]'*[c1vx,c1vy]);
@@ -75,8 +75,8 @@ for (int nt = 0; nt < steps; nt++){
 mesh PhDef = movemesh(Ph,[x+pxx,y+pyy]);
 mesh C1hDef = movemesh(C1h,[x+c1xx,y+c1yy]);
 bool ActiveContact = ContactChecker(Persistence, PhDef, TractNP[], C1hDef, TractNC1[], C2h, TractNC2[]);
-SchwarzNormalTraction(Ph,ShP,top,PMat,TractPx[],TractPy[],TractNP[]);
-SchwarzNormalTraction(C1h,ShC1,circle1,C1Mat,TractC1x[],TractC1y[],TractNC1[]);
+SchwarzNormalTraction(Ph,ShP,top,PMat,TractPx,TractPy,TractNP);
+SchwarzNormalTraction(C1h,ShC1,circle1,C1Mat,TractC1x,TractC1y,TractNC1);
 int SchwarzLoopIters = 0;
 // ------------------------ Schwarz Contact ------------------------ 
 while(true){// --- Begin Schwarz While --- 
@@ -86,26 +86,30 @@ for (int siters = 0; siters<=SchwarzIter; siters++){
 cout << "Step #: " << nt << " contact detected." << endl;
 ContPC1 = chi(C1hDef)(x+pxx,y+pyy); ContC1P = chi(PhDef)(x+c1xx,y+c1yy);
 // Solve Plate
-SchwarzTransfer(-TractC1x,-TractC1y,c1xx,c1yy,LambdaPx,LambdaPy,thetaP,alphaPC1,betaPC1);
+SchwarzTransfer(TractC1x,TractC1y,c1xx,c1yy,LambdaPx,LambdaPy,thetaP,alphaPC1,betaPC1);
 NewarkP;
 PlasticBuildTrial
 (pxx,pyy,pxxo,pyyo,pTrace,pP,pSigVMt,pPlEpsXX,pPlEpsYY,pPlEpsZZ,pPlEpsXY, 
 pElEpsXXt,pElEpsYYt,pElEpsZZt,pElEpsXYt, pSigXXt,pSigYYt,pSigZZt,pSigXYt, 
 pSigXX,pSigYY,pSigZZ,pSigXY,pDevXXt,pDevYYt,pDevZZt,pDevXYt,lambdaA,muA);
 PlasticSolve
-(Ph,pEqPlEps,pSigVMt,pTemp,pDevXXt,pDevYYt,pDevZZt,pDevXYt, 
-pDevXX,pDevYY,pDevZZ,pDevXY,pSigXX,pSigYY,pSigZZ,pSigXY);
+(ShP,pEqPlEps,pSigVMt,pTemp,pDevXXt,pDevYYt,pDevZZt,pDevXYt, 
+pDevXX,pDevYY,pDevZZ,pDevXY,pSigXX,pSigYY,pSigZZ,pSigXY,
+pP,pPlEpsXX,pPlEpsYY,pPlEpsZZ,pPlEpsXY,
+rhoA,AA,BA,nJCA,CA,TmA,mA,TQ,CpA,muA)
 SchwarzTractionSolve(Ph,ShP,top,PMat,TractPx,TractPy,pSigXX,pSigYY,pSigXY);
 // Solve Particle 1
-SchwarzTransfer(-TractPx,-TractPy,pxx,pyy,LambdaC1x,LambdaC1y,thetaC1,alphaC1P,betaC1P);
+SchwarzTransfer(TractPx,TractPy,pxx,pyy,LambdaC1x,LambdaC1y,thetaC1,alphaC1P,betaC1P);
 NewarkC1;
 PlasticBuildTrial
 (c1xx,c1yy,c1xxo,c1yyo,c1Trace,c1P,c1SigVMt,c1PlEpsXX,c1PlEpsYY,c1PlEpsZZ,c1PlEpsXY, 
 c1ElEpsXXt,c1ElEpsYYt,c1ElEpsZZt,c1ElEpsXYt,c1SigXXt,c1SigYYt,c1SigZZt,c1SigXYt, 
 c1SigXX,c1SigYY,c1SigZZ,c1SigXY,c1DevXXt,c1DevYYt,c1DevZZt,c1DevXYt,lambdaC,muC);
 PlasticSolve
-(C1h,c1EqPlEps,c1SigVMt,c1Temp,c1DevXXt,c1DevYYt,c1DevZZt,c1DevXYt, 
-c1DevXX,c1DevYY,c1DevZZ,c1DevXY,c1SigXX,c1SigYY,c1SigZZ,c1SigXY);
+(ShC1,c1EqPlEps,c1SigVMt,c1Temp,c1DevXXt,c1DevYYt,c1DevZZt,c1DevXYt, 
+c1DevXX,c1DevYY,c1DevZZ,c1DevXY,c1SigXX,c1SigYY,c1SigZZ,c1SigXY,
+c1P,c1PlEpsXX,c1PlEpsYY,c1PlEpsZZ,c1PlEpsXY,
+rhoC,AC,BC,nJCC,CC,TmC,mC,TQ,CpC,muC)
 SchwarzTractionSolve(C1h,ShC1,circle1,C1Mat,TractC1x,TractC1y,c1SigXX,c1SigYY,c1SigXY);
 } // --- End Schwarz For ---
 } // --- End Schwarz If --- 
@@ -119,8 +123,10 @@ PlasticBuildTrial
 pElEpsXXt,pElEpsYYt,pElEpsZZt,pElEpsXYt, pSigXXt,pSigYYt,pSigZZt,pSigXYt, 
 pSigXX,pSigYY,pSigZZ,pSigXY,pDevXXt,pDevYYt,pDevZZt,pDevXYt, lambdaA,muA);
 PlasticSolve
-(Ph,pEqPlEps,pSigVMt,pTemp,pDevXXt,pDevYYt,pDevZZt,pDevXYt, 
-pDevXX,pDevYY,pDevZZ,pDevXY,pSigXX,pSigYY,pSigZZ,pSigXY);
+(ShP,pEqPlEps,pSigVMt,pTemp,pDevXXt,pDevYYt,pDevZZt,pDevXYt, 
+pDevXX,pDevYY,pDevZZ,pDevXY,pSigXX,pSigYY,pSigZZ,pSigXY,
+pP,pPlEpsXX,pPlEpsYY,pPlEpsZZ,pPlEpsXY,
+rhoA,AA,BA,nJCA,CA,TmA,mA,TQ,CpA,muA)
 // Solve Particle 1
 NewarkC1;
 PlasticBuildTrial
@@ -128,14 +134,16 @@ PlasticBuildTrial
 c1ElEpsXXt,c1ElEpsYYt,c1ElEpsZZt,c1ElEpsXYt,c1SigXXt,c1SigYYt,c1SigZZt,c1SigXYt,
 c1SigXX,c1SigYY,c1SigZZ,c1SigXY,c1DevXXt,c1DevYYt,c1DevZZt,c1DevXYt,lambdaC,muC);
 PlasticSolve
-(C1h,c1EqPlEps,c1SigVMt,c1Temp,c1DevXXt,c1DevYYt,c1DevZZt,c1DevXYt, 
-c1DevXX,c1DevYY,c1DevZZ,c1DevXY,c1SigXX,c1SigYY,c1SigZZ,c1SigXY);
+(ShC1,c1EqPlEps,c1SigVMt,c1Temp,c1DevXXt,c1DevYYt,c1DevZZt,c1DevXYt, 
+c1DevXX,c1DevYY,c1DevZZ,c1DevXY,c1SigXX,c1SigYY,c1SigZZ,c1SigXY,
+c1P,c1PlEpsXX,c1PlEpsYY,c1PlEpsZZ,c1PlEpsXY,
+rhoC,AC,BC,nJCC,CC,TmC,mC,TQ,CpC,muC)
 }// --- End No Contact Solve --- 
 // --- Begin Schwarz Contact Consistency --- 
 PhDef = movemesh(Ph,[x+pxx,y+pyy]);
 C1hDef = movemesh(C1h,[x+c1xx,y+c1yy]);
-SchwarzNormalTraction(Ph,ShP,top,PMat,TractPx[],TractPy[],TractNP[]);
-SchwarzNormalTraction(C1h,ShC1,circle1,C1Mat,TractC1x[],TractC1y[],TractNC1[]);
+SchwarzNormalTraction(Ph,ShP,top,PMat,TractPx,TractPy,TractNP);
+SchwarzNormalTraction(C1h,ShC1,circle1,C1Mat,TractC1x,TractC1y,TractNC1);
 Persistence = ActiveContact;
 ActiveContact = ContactChecker(Persistence, PhDef, TractNP[], C1hDef, TractNC1[], C2h, TractNC2[]);
 SchwarzLoopIters++;
