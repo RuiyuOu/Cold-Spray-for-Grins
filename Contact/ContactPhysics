@@ -51,9 +51,9 @@ real errRel;
 int  SchwarzLoopStop  = 10;
 
 // Schwarz Robin parameters
-real alpha12 = 1e-3;
+real alpha12 = dt/ps;
 real beta12  = 1.0;
-real alpha21 = 1e-3;
+real alpha21 = dt/ps;
 real beta21  = 1.0;
 real theta1  = 1;
 real theta2  = 1;
@@ -164,7 +164,12 @@ for (int nt = 0; nt < steps; nt++){
 			           + int2d(Ch)((cxx-cxxPrev)^2+(cyy-cyyPrev)^2) );
 		  // Adding a tiny bit to prevent div by 0
 		  errRel = errAbs / sqrt( int2d(Ph)(pxx^2+pyy^2) + int2d(Ch)(cxx^2+cyy^2) + 1e-30 );
-
+		  
+		  if ((siters+1) % 5 == 0){
+			  cout << "Possible Schwarz looping. Averaging..." << endl;
+			  [pxx,pyy] = 0.5*[pxx,pyy] + 0.5*[pxxPrev,pyyPrev];
+			  [cxx,cyy] = 0.5*[cxx,cyy] + 0.5*[cxxPrev,cyyPrev];
+		  }
 		  [pxxPrev,pyyPrev] = [pxx,pyy];
 		  [cxxPrev,cyyPrev] = [cxx,cyy];
 

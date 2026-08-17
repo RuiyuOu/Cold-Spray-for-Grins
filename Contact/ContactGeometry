@@ -6,11 +6,11 @@ int circle = 5;
 
 int nn = 10;
 
-border S1(t=0,1){ x=5*t;   y=0;   label=bottom; }
-border S2(t=0,1){ x=5;   y=1*t;   label=right; }
-border S3(t=0,1){ x=5-5*t; y=1;   label=top; }
-border S4(t=0,1){ x=0;   y=1-1*t; label=left; }
-border S5(t=0,2*3.14159265){x=2.5+0.5*cos(t); y=2+0.5*sin(t); label=circle;}
+border S1(t=0,1){ x=5*t;   y=-1;   label=bottom; }
+border S2(t=0,1){ x=5;   y=-1+t;   label=right; }
+border S3(t=0,1){ x=5-5*t; y=0;   label=top; }
+border S4(t=0,1){ x=0;   y=-1*t; label=left; }
+border S5(t=0,2*3.14159265){x=2.5+0.5*cos(t); y=1+0.5*sin(t); label=circle;}
 
 mesh Ph = buildmesh(S1(5*nn)+S2(nn)+S3(5*nn)+S4(nn));
 mesh Ch = buildmesh(S5(3*nn));
@@ -32,7 +32,6 @@ UhC [cvxo,cvyo];
 UhC [cax,cay];
 UhC [caxo,cayo];
 UhC [cvi,cvj];
-
 // Schwarz information
 fespace ShP(Ph,P1);
 ShP TractPx, TractPy;

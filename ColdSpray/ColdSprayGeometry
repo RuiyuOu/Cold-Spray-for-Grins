@@ -9,12 +9,12 @@ int nn = 10;
 
 real scale = 25e-6;
 
-border S1(t=0,1){ x=scale*(6*t);   y=0;   label=bottom; }
-border S2(t=0,1){ x=scale*6;   y=scale*2*t;   label=right; }
-border S3(t=0,1){ x=scale*(6-6*t); y=scale*2;   label=top; }
-border S4(t=0,1){ x=0;   y=scale*(2-2*t); label=left; }
-border S5(t=0,2*3.14159265){x=scale*(2.65+0.5*cos(t)); y=scale*(2.6+0.5*sin(t)); label=circle1;}
-border S6(t=0,2*3.14159265){x=scale*(3.35+0.5*cos(t)); y=scale*(3.7+0.5*sin(t)); label=circle2;}
+border S1(t=0,1){ x=scale*(6*t);   y=scale*(-2);   label=bottom; }
+border S2(t=0,1){ x=scale*6;   y=scale*(2*t-2);   label=right; }
+border S3(t=0,1){ x=scale*(6-6*t); y=scale*(2-2);   label=top; }
+border S4(t=0,1){ x=0;   y=scale*(2-2*t-2); label=left; }
+border S5(t=0,2*3.14159265){x=scale*(2.65+0.5*cos(t)); y=scale*(2.6-2+0.5*sin(t)); label=circle1;}
+border S6(t=0,2*3.14159265){x=scale*(3.35+0.5*cos(t)); y=scale*(3.7-2+0.5*sin(t)); label=circle2;}
 
 mesh Ph = buildmesh(S1(5*nn)+S2(nn)+S3(5*nn)+S4(nn));
 mesh C1h = buildmesh(S5(3*nn));

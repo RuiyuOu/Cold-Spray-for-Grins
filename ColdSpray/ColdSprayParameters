@@ -6,20 +6,6 @@ real dEps0 	= 1.0;   	// Reference strain rate
 // ----------------------- Newark parameters ----------------------- 
 real gamma 	= 0.9;
 real beta 	= 0.25*(0.5+gamma)^2;
-// ----------------------- Schwarz DDM parameters ----------------------- 
-int  SchwarzIter   = 10;
-int  SchwarzLoopStop  = 10;
-real RelSchwarzTol = 1e-9;
-real AbsSchwarzTol = 1e-9;
-real errAbs;
-real errRel;
-real alphaPC1 = 1e-3;
-real betaPC1  = 1.0;
-real alphaC1P = 1e-3;
-real betaC1P  = 1.0;
-real thetaP  = 1;
-real thetaC1  = 1;
-bool Persistence = false;
 // ----------------------- Plasticity Newton Solve Parameters ----------------------- 
 int  newtiters 	= 25;
 real newttol 	= 1e-9;
@@ -52,6 +38,25 @@ real TmA    = 933.;
 real CpA    = 900.;
 real lambdaA= EA*nuA/((1.+nuA)*(1.-2.*nuA));
 real muA 	= EA/(2.*(1.+nuA));
+// ------ Wave speeds ------ 
+real cPS = sqrt((lambdaC+2*muC)/rhoC);
+real cSS = sqrt(muC/rhoC);
+real aPS = sqrt((lambdaA+2*muA)/rhoA);
+real aSS = sqrt(muA/rhoA);
+// ----------------------- Schwarz DDM parameters ----------------------- 
+int  SchwarzIter   = 20;
+int  SchwarzLoopStop  = 10;
+real RelSchwarzTol = 1e-9;
+real AbsSchwarzTol = 1e-9;
+real errAbs;
+real errRel;
+real alphaPC1 = 1/(rhoA*aPS);
+real betaPC1  = 1.0e0;
+real alphaC1P = 1/(rhoC*cPS);
+real betaC1P  = 1.0e0;
+real thetaP  = 1;
+real thetaC1  = 1;
+bool Persistence = false;
 // ------ Elastic tensor ------ 
 func CElas = [[2*muC+lambdaC,	lambdaC, 		0. ], 
 			 [lambdaC,		2*muC+lambdaC, 	0. ],
@@ -59,11 +64,6 @@ func CElas = [[2*muC+lambdaC,	lambdaC, 		0. ],
 func AElas = [[2*muA+lambdaA,	lambdaA, 		0. ], 
 			 [lambdaA,		2*muA+lambdaA, 	0. ],
 			 [ 0. , 		0. , 			muA ]];
-// ------ Wave speeds ------ 
-real cPS = sqrt((lambdaC+2*muC)/rhoC);
-real cSS = sqrt(muC/rhoC);
-real aPS = sqrt((lambdaA+2*muA)/rhoA);
-real aSS = sqrt(muA/rhoA);
 // ----------------------- Macros -----------------------
 // ------ Newark Macro ------ 
 macro M(a,p) (a[0]*p[0]+a[1]*p[1]) //
@@ -110,11 +110,10 @@ func bool ContactChecker
 	if (Pers){return ((Compression(Tract1) || Compression(Tract2)) || Compression(Tract3));}
 	else {return Overlap(Th1Def,Th2Def,Th3Def);}}
 // ------ Schwarz Information Transfer ------ 
-macro SchwarzTransfer
-(Transx, Transy, Dirx, Diry, Lambdax, Lambday, theta, alphaS, betaS)
+macro SchwarzTransfer(Transx, Transy, Dirx, Diry, Lambdax, Lambday, theta, alphaS, betaS)
 {
-Lambdax = (1-theta)*Lambdax; Lambdax = theta*betaS*Dirx + Lambdax; Lambdax = theta*alphaS*Transx - Lambdax;
-Lambday = (1-theta)*Lambday; Lambday = theta*alphaS*Transy - Lambday; Lambday = theta*betaS*Diry + Lambday;
+Lambdax = (1-theta)*Lambdax; Lambdax = theta*betaS*Dirx + Lambdax; Lambdax = Lambdax-theta*alphaS*Transx;
+Lambday = (1-theta)*Lambday; Lambday = Lambday - theta*alphaS*Transy; Lambday = theta*betaS*Diry + Lambday;
 } //
 // ------ Schwarz Traction Solve ------ 
 macro SchwarzTractionSolve(Th, Sh, IntRegion, Mat, Tractx, Tracty, SigmaXX, SigmaYY, SigmaXY)
@@ -123,15 +122,13 @@ varf VTx(u,v) = int1d(Th, IntRegion)((SigmaXX*N.x + SigmaXY*N.y)*v);
 varf VTy(u,v) = int1d(Th, IntRegion)((SigmaXY*N.x + SigmaYY*N.y)*v);
 real[int] Tx = VTx(0, Sh); Tractx[] = Mat^-1 * Tx;
 real[int] Ty = VTy(0, Sh); Tracty[] = Mat^-1 * Ty;
-}
-//
+} //
 // ------ Schwarz Normal Traction ------ 
 macro SchwarzNormalTraction(Th, Sh, IntRegion, Mat, Tractx, Tracty, TractN)
 {
 varf VTn(u,v) = int1d(Th, IntRegion)( (Tractx*N.x + Tracty*N.y)*v );
 real[int] Tn = VTn(0, Sh); TractN[] = Mat^-1 * Tn;
-}
-//
+} //
 // ----------------------- Plasticity Functions -----------------------
 // ------ Johnson-Cook Yield Stress ------ 
 func real SigmaY(real A, real B, real nJC, real C, real Eps, real dEps, real T, real Tm, real m){
@@ -187,14 +184,13 @@ for (int i = 0; i < Sh.ndof; i++){
 	PlEpsZZ[][i] += factor*sn[2];
 	PlEpsXY[][i] += 2*factor*sn[3];
 	Temp[][i] 	 += TempGen(rho,A,B,nJC,C,EqPlEps[][i],DelG,Temp[][i],Tm,m,TQ,Cp);
+	}
 	SigXX[][i]	 = p[][i] + DevXX[][i];
 	SigYY[][i]	 = p[][i] + DevYY[][i];
 	SigZZ[][i]	 = p[][i] + DevZZ[][i];
 	SigXY[][i]	 = DevXY[][i];
-	}
 }
-}
-//
+} //
 // ------ Newton-Raphson ------ 
 func real Newton(real vmTrial, real epsEqOld, real Told, real dt, real mu,
                   real rho, real A, real B, real nJC, real C, real Tm, real m, real TQ, real Cp)

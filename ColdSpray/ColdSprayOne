@@ -12,9 +12,11 @@ int[int] vtkorder = [1,1,1,1];
 real T 		= 50e-9;
 real pMinGridSize = pCFL[].min;
 real c1MinGridSize= c1CFL[].min;
-real dt 	= min(TimeStepSize(pMinGridSize,min(aPS,aSS)),
-				  TimeStepSize(c1MinGridSize,min(cPS,cSS)));
+real dt 	= min(TimeStepSize(pMinGridSize,min(aPS,aSS)),TimeStepSize(c1MinGridSize,min(cPS,cSS)));
 real steps 	= T/dt;	
+
+alphaPC1 = dt/(rhoA*aPS);
+alphaC1P = dt/(rhoC*cPS);
 // ------------------------ Schwarz Auxillary Fields ------------------------ 
 UhP [pxxPrev,pyyPrev];
 UhC1 [c1xxPrev,c1yyPrev];
@@ -81,9 +83,9 @@ int SchwarzLoopIters = 0;
 // ------------------------ Schwarz Contact ------------------------ 
 while(true){// --- Begin Schwarz While --- 
 if(ActiveContact){
+cout << "Step #: " << nt << " contact detected." << endl;
 // --- Begin Contact Solve --- 
 for (int siters = 0; siters<=SchwarzIter; siters++){
-cout << "Step #: " << nt << " contact detected." << endl;
 ContPC1 = chi(C1hDef)(x+pxx,y+pyy); ContC1P = chi(PhDef)(x+c1xx,y+c1yy);
 // Solve Plate
 SchwarzTransfer(TractC1x,TractC1y,c1xx,c1yy,LambdaPx,LambdaPy,thetaP,alphaPC1,betaPC1);
@@ -111,6 +113,25 @@ c1DevXX,c1DevYY,c1DevZZ,c1DevXY,c1SigXX,c1SigYY,c1SigZZ,c1SigXY,
 c1P,c1PlEpsXX,c1PlEpsYY,c1PlEpsZZ,c1PlEpsXY,
 rhoC,AC,BC,nJCC,CC,TmC,mC,TQ,CpC,muC)
 SchwarzTractionSolve(C1h,ShC1,circle1,C1Mat,TractC1x,TractC1y,c1SigXX,c1SigYY,c1SigXY);
+
+errAbs = sqrt( int2d(Ph)((pxx-pxxPrev)^2+(pyy-pyyPrev)^2)+ int2d(C1h)((c1xx-c1xxPrev)^2+(c1yy-c1yyPrev)^2) );
+// Adding a tiny bit to prevent div by 0
+errRel = errAbs / sqrt( int2d(Ph)(pxx^2+pyy^2) + int2d(C1h)(c1xx^2+c1yy^2) + 1e-30 );
+//if ((siters+1) % 5 == 0){// --- Begin Crude 2 State Loop Breaker --- 
+//cout << "Possible Schwarz looping. Averaging..." << endl;
+//[pxx,pyy] = 0.5*[pxx,pyy] + 0.5*[pxxPrev,pyyPrev];
+//[c1xx,c1yy] = 0.5*[c1xx,c1yy] + 0.5*[c1xxPrev,c1yyPrev];
+//}// --- End Crude 2 State Loop Breaker --- 
+[pxxPrev,pyyPrev] = [pxx,pyy];
+[c1xxPrev,c1yyPrev] = [c1xx,c1yy];
+if (errRel < RelSchwarzTol){
+cout << "Schwarz converged in " << siters << " steps. AbsErr = " 
+<< errAbs << ". RelErr = " << errRel << endl;
+break;}
+if (siters == SchwarzIter){
+cout << "Schwarz iteration limit reached. AbsErr = " 
+<< errAbs << ". RelErr = " << errRel << endl;
+}
 } // --- End Schwarz For ---
 } // --- End Schwarz If --- 
 else{// --- Begin No Contact Solve --- 
@@ -165,7 +186,7 @@ c1xxo[] = c1xx[]; c1axo[] = c1ax[]; c1vxo[] = c1vx[];
 if (nt%3==0){
 		
 	real KE = 0.5*rhoA*int2d(Ph)([pvx,pvy]'*[pvx,pvy])+0.5*rhoC*int2d(C1h)([c1vx,c1vy]'*[c1vx,c1vy]);
-	real EE = 0.5*int2d(Ph)([pSigXX,pSigYY,pSigXY]'*(eps([pxx,pyy])-[pPlEpsXX,pPlEpsYY,pPlEpsXY]));
+	real EE = 0.5*int2d(Ph)([pSigXX,pSigYY,pSigXY]'*(eps([pxx,pyy])-[pPlEpsXX,pPlEpsYY,pPlEpsXY]))+0.5*int2d(C1h)([c1SigXX,c1SigYY,c1SigXY]'*(eps([c1xx,c1yy])-[c1PlEpsXX,c1PlEpsYY,c1PlEpsXY]));
 	real TE = rhoA*CpA*int2d(Ph)(pTemp-T0)+rhoC*CpC*int2d(C1h)(pTemp-T0);
 
 	cout << "Energy Start" << Estart
