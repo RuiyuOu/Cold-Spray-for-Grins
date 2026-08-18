@@ -88,7 +88,7 @@ cout << "Step #: " << nt << " contact detected." << endl;
 for (int siters = 0; siters<=SchwarzIter; siters++){
 ContPC1 = chi(C1hDef)(x+pxx,y+pyy); ContC1P = chi(PhDef)(x+c1xx,y+c1yy);
 // Solve Plate
-SchwarzTransfer(TractC1x,TractC1y,c1xx,c1yy,LambdaPx,LambdaPy,thetaP,alphaPC1,betaPC1);
+SchwarzTransfer(TractC1x,TractC1y,c1xx,c1yy,LambdaPx,LambdaPy,thetaP,alphaPC1,betaPC1,ContPC1);
 NewarkP;
 PlasticBuildTrial
 (pxx,pyy,pxxo,pyyo,pTrace,pP,pSigVMt,pPlEpsXX,pPlEpsYY,pPlEpsZZ,pPlEpsXY, 
@@ -101,7 +101,7 @@ pP,pPlEpsXX,pPlEpsYY,pPlEpsZZ,pPlEpsXY,
 rhoA,AA,BA,nJCA,CA,TmA,mA,TQ,CpA,muA)
 SchwarzTractionSolve(Ph,ShP,top,PMat,TractPx,TractPy,pSigXX,pSigYY,pSigXY);
 // Solve Particle 1
-SchwarzTransfer(TractPx,TractPy,pxx,pyy,LambdaC1x,LambdaC1y,thetaC1,alphaC1P,betaC1P);
+SchwarzTransfer(TractPx,TractPy,pxx,pyy,LambdaC1x,LambdaC1y,thetaC1,alphaC1P,betaC1P,ContC1P);
 NewarkC1;
 PlasticBuildTrial
 (c1xx,c1yy,c1xxo,c1yyo,c1Trace,c1P,c1SigVMt,c1PlEpsXX,c1PlEpsYY,c1PlEpsZZ,c1PlEpsXY, 
@@ -187,7 +187,7 @@ if (nt%3==0){
 		
 	real KE = 0.5*rhoA*int2d(Ph)([pvx,pvy]'*[pvx,pvy])+0.5*rhoC*int2d(C1h)([c1vx,c1vy]'*[c1vx,c1vy]);
 	real EE = 0.5*int2d(Ph)([pSigXX,pSigYY,pSigXY]'*(eps([pxx,pyy])-[pPlEpsXX,pPlEpsYY,pPlEpsXY]))+0.5*int2d(C1h)([c1SigXX,c1SigYY,c1SigXY]'*(eps([c1xx,c1yy])-[c1PlEpsXX,c1PlEpsYY,c1PlEpsXY]));
-	real TE = rhoA*CpA*int2d(Ph)(pTemp-T0)+rhoC*CpC*int2d(C1h)(pTemp-T0);
+	real TE = rhoA*CpA*int2d(Ph)(pTemp-T0)+rhoC*CpC*int2d(C1h)(c1Temp-T0);
 
 	cout << "Energy Start" << Estart
     << "   KE+EE+TE " << KE+EE+TE << endl;
@@ -200,10 +200,10 @@ if (nt%3==0){
 	mesh Combined = PhDef+C1hDef;
 	// Pressure and shear waves 
 	fespace Wh(Combined,P1);
-	Wh pw = dx(pxx)+dy(pyy) + dx(c1xx)+dy(c1yy);
-	Wh sw = dy(pxx)-dx(pyy) + dy(c1xx)-dx(c1yy);
-	Wh SigVM = SigmaVM([pDevXX,pDevYY,pDevZZ,pDevXY]) + SigmaVM([c1DevXX,c1DevYY,pDevZZ,pDevXY]);
-	Wh Temp = pTemp +c1Temp;
+	Wh pw = (dx(pxx)+dy(pyy))*chi(PhDef)(x,y) + (dx(c1xx)+dy(c1yy))*chi(C1hDef)(x,y);
+	Wh sw = (dy(pxx)-dx(pyy))*chi(PhDef)(x,y) + (dy(c1xx)-dx(c1yy))*chi(C1hDef)(x,y);
+	Wh SigVM = SigmaVM([pDevXX,pDevYY,pDevZZ,pDevXY])*chi(PhDef)(x,y) + SigmaVM([c1DevXX,c1DevYY,c1DevZZ,c1DevXY])*chi(C1hDef)(x,y);
+	Wh Temp = pTemp*chi(PhDef)(x,y) + c1Temp*chi(C1hDef)(x,y);
 		
 	if 		(nt < 10) 	filenum = "000"	+nt;
 	else if (nt < 100) 	filenum = "00"	+nt;

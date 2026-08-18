@@ -110,10 +110,10 @@ func bool ContactChecker
 	if (Pers){return ((Compression(Tract1) || Compression(Tract2)) || Compression(Tract3));}
 	else {return Overlap(Th1Def,Th2Def,Th3Def);}}
 // ------ Schwarz Information Transfer ------ 
-macro SchwarzTransfer(Transx, Transy, Dirx, Diry, Lambdax, Lambday, theta, alphaS, betaS)
+macro SchwarzTransfer(Transx, Transy, Dirx, Diry, Lambdax, Lambday, theta, alphaS, betaS, Cont)
 {
-Lambdax = (1-theta)*Lambdax; Lambdax = theta*betaS*Dirx + Lambdax; Lambdax = Lambdax-theta*alphaS*Transx;
-Lambday = (1-theta)*Lambday; Lambday = Lambday - theta*alphaS*Transy; Lambday = theta*betaS*Diry + Lambday;
+Lambdax = (1-theta)*Lambdax; Lambdax = Cont*theta*betaS*Dirx + Lambdax; Lambdax = Lambdax + Cont*theta*alphaS*Transx;
+Lambday = (1-theta)*Lambday; Lambday = Lambday + Cont*theta*alphaS*Transy; Lambday = Cont*theta*betaS*Diry + Lambday;
 } //
 // ------ Schwarz Traction Solve ------ 
 macro SchwarzTractionSolve(Th, Sh, IntRegion, Mat, Tractx, Tracty, SigmaXX, SigmaYY, SigmaXY)
@@ -184,11 +184,20 @@ for (int i = 0; i < Sh.ndof; i++){
 	PlEpsZZ[][i] += factor*sn[2];
 	PlEpsXY[][i] += 2*factor*sn[3];
 	Temp[][i] 	 += TempGen(rho,A,B,nJC,C,EqPlEps[][i],DelG,Temp[][i],Tm,m,TQ,Cp);
-	}
 	SigXX[][i]	 = p[][i] + DevXX[][i];
 	SigYY[][i]	 = p[][i] + DevYY[][i];
 	SigZZ[][i]	 = p[][i] + DevZZ[][i];
-	SigXY[][i]	 = DevXY[][i];
+	SigXY[][i]	 = DevXY[][i];}
+	else{
+	DevXX[][i]	 = DevXXt[][i];
+	DevYY[][i]	 = DevYYt[][i];
+	DevZZ[][i]	 = DevZZt[][i];
+	DevXY[][i]	 = DevXYt[][i];
+	SigXX[][i]	 = p[][i] + DevXX[][i];
+	SigYY[][i]	 = p[][i] + DevYY[][i];
+	SigZZ[][i]	 = p[][i] + DevZZ[][i];
+	SigXY[][i]	 = DevXY[][i];}
+	
 }
 } //
 // ------ Newton-Raphson ------ 

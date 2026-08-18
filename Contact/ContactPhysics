@@ -26,6 +26,7 @@ real T 		= 3;
 real MinGridSize = min(pCFL[].min,cCFL[].min);
 real dt 	= TimeStepSize(MinGridSize,max(ps,ss));
 real steps 	= T/dt;
+cout << dt/ps<< endl;
 
 // Data order
 int[int] vtkorder = [1,1];
@@ -33,6 +34,10 @@ int[int] vtkorder = [1,1];
 // Beta Newark parameters
 real gamma 	= 0.9;
 real beta 	= 0.25*(0.5+gamma)^2;
+
+// Rayleigh dampening terms
+real AlphaM 	= 0.01;
+real AlphaK 	= 0.01;
 
 // Newark constants
 real C0 = c0(dt,beta,gamma);
@@ -55,8 +60,8 @@ real alpha12 = dt/ps;
 real beta12  = 1.0;
 real alpha21 = dt/ps;
 real beta21  = 1.0;
-real theta1  = 1;
-real theta2  = 1;
+real theta1  = 0.8;
+real theta2  = 0.8;
 
 // Schwarz past iter data
 UhP [pxxPrev,pyyPrev];
@@ -66,10 +71,18 @@ bool Persistence = false;
 problem NewarkP([pxx,pyy],[pvi,pvj])
 	= int2d(Ph)(
               	C0*M([pxx,pyy],[pvi,pvj])+
+				AlphaM*C3*M([pxx,pyy],[pvi,pvj])+
+				AlphaK*C3*K([pxx,pyy],[pvi,pvj])+
 				K([pxx,pyy],[pvi,pvj])
 				)
     - int2d(Ph)(
 				C0*M([pxxo,pyyo],[pvi,pvj]) + C1*M([pvxo,pvyo],[pvi,pvj]) + C2*M([paxo,payo],[pvi,pvj])+
+				AlphaM*(C3*M([pxxo,pyyo],[pvi,pvj]) 
+					  + C4*M([pvxo,pvyo],[pvi,pvj]) 
+					  + C5*M([paxo,payo],[pvi,pvj]))+
+				AlphaK*(C3*K([pxxo,pyyo],[pvi,pvj]) 
+					  + C4*K([pvxo,pvyo],[pvi,pvj]) 
+					  + C5*K([paxo,payo],[pvi,pvj]))+
 				g*pvj
 				)
 	+ int1d(Ph, top)(ContP*(beta12/alpha12)*(pxx*pvi+pyy*pvj))
@@ -80,10 +93,18 @@ problem NewarkP([pxx,pyy],[pvi,pvj])
 problem NewarkC([cxx,cyy],[cvi,cvj])
 	= int2d(Ch)(
               	C0*M([cxx,cyy],[cvi,cvj])+
+				AlphaM*C3*M([cxx,cyy],[cvi,cvj])+
+				AlphaK*C3*K([cxx,cyy],[cvi,cvj])+
 				K([cxx,cyy],[cvi,cvj])
 				)
     - int2d(Ch)(
 				C0*M([cxxo,cyyo],[cvi,cvj]) + C1*M([cvxo,cvyo],[cvi,cvj]) + C2*M([caxo,cayo],[cvi,cvj])+
+				AlphaM*(C3*M([cxxo,cyyo],[cvi,cvj]) 
+					  + C4*M([cvxo,cvyo],[cvi,cvj]) 
+					  + C5*M([caxo,cayo],[cvi,cvj]))+
+				AlphaK*(C3*K([cxxo,cyyo],[cvi,cvj]) 
+					  + C4*K([cvxo,cvyo],[cvi,cvj]) 
+					  + C5*K([caxo,cayo],[cvi,cvj]))+
 				g*cvj
 				)
 	+ int1d(Ch, circle)(ContC*(beta21/alpha21)*(cxx*cvi+cyy*cvj))
@@ -127,8 +148,8 @@ for (int nt = 0; nt < steps; nt++){
 		  ContP = chi(ChDef)(x+pxx,y+pyy);
 		  ContC = chi(PhDef)(x+cxx,y+cyy);
 
-		  TransPx = -TractCx; TransPy = -TractCy;
-		  DirPx = cxx; DirPy = cyy; 
+		  TransPx = TractCx*ContP; TransPy = TractCy*ContP;
+		  DirPx = cxx*ContP; DirPy = cyy*ContP; 
 
 		  LambdaPx = theta1*(alpha12*TransPx + beta12*DirPx) + (1-theta1)*LambdaPx;
 		  LambdaPy = theta1*(alpha12*TransPy + beta12*DirPy) + (1-theta1)*LambdaPy;
@@ -145,8 +166,8 @@ for (int nt = 0; nt < steps; nt++){
 		  TractPy[] = PMat^-1 * TyP;
 				
 		  // The new data have not been saved permanently yet so we can freely call it
-		  TransCx = -TractPx; TransCy = -TractPy;
-		  DirCx = pxx; DirCy = pyy; 
+		  TransCx = TractPx*ContC; TransCy = TractPy*ContC;
+		  DirCx = pxx*ContC; DirCy = pyy*ContC; 
 				
 		  LambdaCx = theta2*(alpha21*TransCx + beta21*DirCx) + (1-theta2)*LambdaCx;
 		  LambdaCy = theta2*(alpha21*TransCy + beta21*DirCy) + (1-theta2)*LambdaCy;
@@ -165,11 +186,11 @@ for (int nt = 0; nt < steps; nt++){
 		  // Adding a tiny bit to prevent div by 0
 		  errRel = errAbs / sqrt( int2d(Ph)(pxx^2+pyy^2) + int2d(Ch)(cxx^2+cyy^2) + 1e-30 );
 		  
-		  if ((siters+1) % 5 == 0){
-			  cout << "Possible Schwarz looping. Averaging..." << endl;
-			  [pxx,pyy] = 0.5*[pxx,pyy] + 0.5*[pxxPrev,pyyPrev];
-			  [cxx,cyy] = 0.5*[cxx,cyy] + 0.5*[cxxPrev,cyyPrev];
-		  }
+		  //if ((siters+1) % 5 == 0){
+			//  cout << "Possible Schwarz looping. Averaging..." << endl;
+			//  [pxx,pyy] = 0.5*[pxx,pyy] + 0.5*[pxxPrev,pyyPrev];
+			//  [cxx,cyy] = 0.5*[cxx,cyy] + 0.5*[cxxPrev,cyyPrev];
+		  //}
 		  [pxxPrev,pyyPrev] = [pxx,pyy];
 		  [cxxPrev,cyyPrev] = [cxx,cyy];
 
@@ -249,6 +270,7 @@ for (int nt = 0; nt < steps; nt++){
 		
 		// Block deformation
 		mesh Combined 	= PhDef+ChDef;
+		mesh CombNoDef  = Ph+Ch;
 
 		real KE = 0.5*int2d(Ph)([pvx,pvy]'*[pvx,pvy])+0.5*int2d(Ch)([cvx,cvy]'*[cvx,cvy]);
 		real PE = int2d(Combined)(-g*y);
@@ -259,16 +281,26 @@ for (int nt = 0; nt < steps; nt++){
 
 		// Pressure and shear waves 
 		fespace Wh(Combined, P1);
-		Wh pw = dx(pxx)+dy(pyy) + dx(cxx)+dy(cyy);
-		Wh sw = dy(pxx)-dx(pyy) + dy(cxx)-dx(cyy);
+		Wh pwd = (dx(pxx)+dy(pyy))*chi(PhDef)(x,y) + (dx(cxx)+dy(cyy))*chi(ChDef)(x,y);
+		Wh swd = (dy(pxx)-dx(pyy))*chi(PhDef)(x,y) + (dy(cxx)-dx(cyy))*chi(ChDef)(x,y);
+	
+		fespace Dh(CombNoDef, P1);
+		Dh pw = (dx(pxx)+dy(pyy))*chi(Ph)(x,y) + (dx(cxx)+dy(cyy))*chi(Ch)(x,y);
+		Dh sw = (dy(pxx)-dx(pyy))*chi(Ph)(x,y) + (dy(cxx)-dx(cyy))*chi(Ch)(x,y);
+
 
 		if 		(nt < 10) 	filenum = "000"	+nt;
 		else if (nt < 100) 	filenum = "00"	+nt;
 		else if (nt < 1000)	filenum = "0"   +nt;
 		else 				filenum = nt;
 	
-    	savevtk(outdir+"NContact"+filenum+".vtu", 
+    	savevtk(outdir+"Theta08DampedDtPsContact"+filenum+".vtu", 
 				Combined, 
+				pwd, swd, 
+				dataname="PressureWave ShearWave",
+				order=vtkorder);
+    	savevtk(outdir+"Theta08DampedNoDefContact"+filenum+".vtu", 
+				CombNoDef,
 				pw, sw, 
 				dataname="PressureWave ShearWave",
 				order=vtkorder);
