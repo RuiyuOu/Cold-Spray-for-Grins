@@ -1,7 +1,7 @@
 // Runs but gives nonsensical result. Going to look this over tomorrow. 
 load "iovtk"
-include "PlasticGeometry"
-include "PlasticParameters"
+include "PlasticGeometry.idp"
+include "PlasticParameters.idp"
 
 string outdir = "..//Plasticity//results//";
 string filenum;

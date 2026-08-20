@@ -1,6 +1,6 @@
 load "iovtk"
-include "ContactGeometry"
-include "ContactElasticity"
+include "ContactGeometry.idp"
+include "ContactElasticity.idp"
 
 string outdir = "..//Contact//results//";
 string filenum;

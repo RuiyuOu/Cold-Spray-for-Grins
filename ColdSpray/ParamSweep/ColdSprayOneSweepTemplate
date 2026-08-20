@@ -1,7 +1,7 @@
 // Al plate, Cu particle
 load "iovtk"
-include "ColdSprayGeometry"
-include "ColdSprayParametersSweep"
+include "ColdSprayGeometry.idp"
+include "ColdSprayParametersSweep.idp"
 
 // ------------------------ Dir Path ------------------------ 
 string outdir = "OUTDIR_PLACEHOLDER/";

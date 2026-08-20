@@ -56,13 +56,13 @@ for alphaPC1 in $alphaPC1_list; do
                     | sed "s/^real betaPC1  = .*/real betaPC1  = ${betaPC1};/" \
                     | sed "s/^real alphaC1P = .*/real alphaC1P = ${alphaC1P};/" \
                     | sed "s/^real betaC1P  = .*/real betaC1P  = ${betaC1P};/" \
-                    > ColdSprayParametersSweep
+                    > ColdSprayParametersSweep.idp
 
                     sed   "s/SWEEPNAME_PLACEHOLDER/${savename}/" ColdSprayOneSweepTemplate \
                     | sed "s|OUTDIR_PLACEHOLDER|${resultsDir}|" \
-                    > ColdSprayOneSweep
+                    > ColdSprayOneSweep.edp
 
-                    timeout 1200 FreeFem++ -nw ColdSprayOneSweep > "$logfile" 2>&1
+                    timeout 1200 FreeFem++ -nw ColdSprayOneSweep.edp > "$logfile" 2>&1
                     echo "  exit code: $?"
                 else
                     echo "  already run"
