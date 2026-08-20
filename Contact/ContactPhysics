@@ -26,18 +26,17 @@ real T 		= 3;
 real MinGridSize = min(pCFL[].min,cCFL[].min);
 real dt 	= TimeStepSize(MinGridSize,max(ps,ss));
 real steps 	= T/dt;
-cout << dt/ps<< endl;
 
 // Data order
 int[int] vtkorder = [1,1];
 
 // Beta Newark parameters
-real gamma 	= 0.9;
+real gamma 	= 0.5;
 real beta 	= 0.25*(0.5+gamma)^2;
 
 // Rayleigh dampening terms
-real AlphaM 	= 0.01;
-real AlphaK 	= 0.01;
+real AlphaM 	= 0.005;
+real AlphaK 	= 0.005;
 
 // Newark constants
 real C0 = c0(dt,beta,gamma);
@@ -56,13 +55,13 @@ real errRel;
 int  SchwarzLoopStop  = 10;
 
 // Schwarz Robin parameters
-real alpha12 = dt/ps;
+real alpha12 = 5e-3;
 real beta12  = 1.0;
-real alpha21 = dt/ps;
+real alpha21 = 5e-3;
 real beta21  = 1.0;
-real theta1  = 0.8;
-real theta2  = 0.8;
-
+real theta1  = 1;
+real theta2  = 1;
+cout << alpha12<< endl;
 // Schwarz past iter data
 UhP [pxxPrev,pyyPrev];
 UhC [cxxPrev,cyyPrev];
@@ -127,8 +126,8 @@ for (int nt = 0; nt < steps; nt++){
 
 	bool ActiveContact = ContactChecker(Persistence, PhDef, TractNP[], ChDef, TractNC[]);
 
-	varf VTnP(u,v) = int1d(Ph, top)( (TractPx*N.x + TractPy*N.y)*v );
-	varf VTnC(u,v) = int1d(Ch, circle)( (TractCx*N.x + TractCy*N.y)*v );
+	varf VTnP(u,v) = int1d(Ph, top)( (TractPx*N.x + TractPy*N.y)*v*ContP );
+	varf VTnC(u,v) = int1d(Ch, circle)( (TractCx*N.x + TractCy*N.y)*v*ContC );
 	real[int] TnP = VTnP(0, ShP);
 	real[int] TnC = VTnC(0, ShC);
 	TractNP[] = PMat^-1 * TnP;
@@ -148,7 +147,7 @@ for (int nt = 0; nt < steps; nt++){
 		  ContP = chi(ChDef)(x+pxx,y+pyy);
 		  ContC = chi(PhDef)(x+cxx,y+cyy);
 
-		  TransPx = TractCx*ContP; TransPy = TractCy*ContP;
+		  TransPx = -TractCx*ContP; TransPy = -TractCy*ContP;
 		  DirPx = cxx*ContP; DirPy = cyy*ContP; 
 
 		  LambdaPx = theta1*(alpha12*TransPx + beta12*DirPx) + (1-theta1)*LambdaPx;
@@ -166,7 +165,7 @@ for (int nt = 0; nt < steps; nt++){
 		  TractPy[] = PMat^-1 * TyP;
 				
 		  // The new data have not been saved permanently yet so we can freely call it
-		  TransCx = TractPx*ContC; TransCy = TractPy*ContC;
+		  TransCx = -TractPx*ContC; TransCy = -TractPy*ContC;
 		  DirCx = pxx*ContC; DirCy = pyy*ContC; 
 				
 		  LambdaCx = theta2*(alpha21*TransCx + beta21*DirCx) + (1-theta2)*LambdaCx;
@@ -194,7 +193,7 @@ for (int nt = 0; nt < steps; nt++){
 		  [pxxPrev,pyyPrev] = [pxx,pyy];
 		  [cxxPrev,cyyPrev] = [cxx,cyy];
 
-		  if (errAbs < AbsSchwarzTol || errRel < RelSchwarzTol){
+		  if (siters != 0 && (errAbs < AbsSchwarzTol || errRel < RelSchwarzTol)){
 			  cout << "Schwarz converged in " << siters << " steps. AbsErr = " 
 			  << errAbs << ". RelErr = " << errRel << endl;
 
@@ -218,8 +217,8 @@ for (int nt = 0; nt < steps; nt++){
 	  PhDef = movemesh(Ph,[x+pxx,y+pyy]);
 	  ChDef = movemesh(Ch,[x+cxx,y+cyy]);
 
-	  varf VTnP(u,v) = int1d(Ph, top)( (TractPx*N.x + TractPy*N.y)*v );
-	  varf VTnC(u,v) = int1d(Ch, circle)( (TractCx*N.x + TractCy*N.y)*v );
+	  varf VTnP(u,v) = int1d(Ph, top)( (TractPx*N.x + TractPy*N.y)*v*ContP );
+	  varf VTnC(u,v) = int1d(Ch, circle)( (TractCx*N.x + TractCy*N.y)*v*ContC );
 	  real[int] TnP = VTnP(0, ShP);
 	  real[int] TnC = VTnC(0, ShC);
 	  TractNP[] = PMat^-1 * TnP;
@@ -277,7 +276,10 @@ for (int nt = 0; nt < steps; nt++){
 		real EE = 0.5*int2d(Ph)(eps([pxx,pyy])'*Elas*eps([pxx,pyy]))+0.5*int2d(Ch)(eps([cxx,cyy])'*Elas*eps([cxx,cyy]));
 
 		cout << "Estart " << EStart
-		<< "KE+PE+EE " << KE+EE+PE << endl;
+		<< " KE " << KE
+		<< " PE " << PE
+		<< " EE " << EE
+		<< " KE+PE+EE " << KE+EE+PE << endl;
 
 		// Pressure and shear waves 
 		fespace Wh(Combined, P1);
@@ -294,12 +296,12 @@ for (int nt = 0; nt < steps; nt++){
 		else if (nt < 1000)	filenum = "0"   +nt;
 		else 				filenum = nt;
 	
-    	savevtk(outdir+"Theta08DampedDtPsContact"+filenum+".vtu", 
+    	savevtk(outdir+"NTestContact"+filenum+".vtu", 
 				Combined, 
 				pwd, swd, 
 				dataname="PressureWave ShearWave",
 				order=vtkorder);
-    	savevtk(outdir+"Theta08DampedNoDefContact"+filenum+".vtu", 
+    	savevtk(outdir+"NTestNoDefContact"+filenum+".vtu", 
 				CombNoDef,
 				pw, sw, 
 				dataname="PressureWave ShearWave",

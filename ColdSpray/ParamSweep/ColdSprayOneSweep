@@ -1,0 +1,225 @@
+// Al plate, Cu particle
+load "iovtk"
+include "ColdSprayGeometry"
+include "ColdSprayParametersSweep"
+
+// ------------------------ Dir Path ------------------------ 
+string outdir = "results_Params_APC_1e-6_BPC_1e0_ACP_1e-3_BCP_1e0/";
+string filenum;
+string saveName = "Params_APC_1e-6_BPC_1e0_ACP_1e-3_BCP_1e0_ColdSprayOne";
+int[int] vtkorder = [1,1,1,1];
+
+// ------------------------ Time step ------------------------ 
+real T 		= 50e-9;
+real pMinGridSize = pCFL[].min;
+real c1MinGridSize= c1CFL[].min;
+real dt 	= min(TimeStepSize(pMinGridSize,min(aPS,aSS)),TimeStepSize(c1MinGridSize,min(cPS,cSS)));
+real steps 	= T/dt;	
+// alphaPC1 = dt/(rhoA*aPS); // disabled for sweep
+// alphaC1P = dt/(rhoC*cPS); // disabled for sweep
+// ------------------------ Schwarz Auxillary Fields ------------------------ 
+UhP [pxxPrev,pyyPrev];
+UhC1 [c1xxPrev,c1yyPrev];
+// ------------------------ Newark constants ------------------------ 
+real C0 = c0(dt,beta,gamma);
+real C1 = c1(dt,beta,gamma);
+real C2 = c2(dt,beta,gamma);
+real C3 = c3(dt,beta,gamma);
+real C4 = c4(dt,beta,gamma);
+real C5 = c5(dt,beta,gamma);
+// ------------------------ Newark Integrators ------------------------ 
+problem NewarkP([pxx,pyy],[pvi,pvj])
+	= int2d(Ph)(
+              	C0*M([pxx,pyy],[pvi,pvj])+
+				eps([pxx,pyy])'*AElas*eps([pvi,pvj])
+				)
+    - int2d(Ph)(
+				C0*M([pxxo,pyyo],[pvi,pvj]) + C1*M([pvxo,pvyo],[pvi,pvj]) + C2*M([paxo,payo],[pvi,pvj])+
+				eps([pxxo,pyyo])'*AElas*eps([pvi,pvj])
+				)
+	+ int2d(Ph)([pSigXX,pSigYY,pSigXY]'*eps([pvi,pvj]))
+	+ int1d(Ph, top)(ContPC1*(betaPC1/alphaPC1)*(pxx*pvi+pyy*pvj))
+	- int1d(Ph, top)(ContPC1*(1./alphaPC1)*(LambdaPx*pvi+LambdaPy*pvj))
+    + on(bottom, pyy=0);
+
+problem NewarkC1([c1xx,c1yy],[c1vi,c1vj])
+	= int2d(C1h)(
+              	C0*M([c1xx,c1yy],[c1vi,c1vj])+
+				eps([c1xx,c1yy])'*CElas*eps([c1vi,c1vj])
+				)
+    - int2d(C1h)(
+				C0*M([c1xxo,c1yyo],[c1vi,c1vj]) + C1*M([c1vxo,c1vyo],[c1vi,c1vj]) + C2*M([c1axo,c1ayo],[c1vi,c1vj])+
+				eps([c1xxo,c1yyo])'*CElas*eps([c1vi,c1vj])
+				)
+	+ int2d(C1h)([c1SigXX,c1SigYY,c1SigXY]'*eps([c1vi,c1vj]))
+	+ int1d(C1h, circle1)(ContC1P*(betaC1P/alphaC1P)*(c1xx*c1vi+c1yy*c1vj))
+	- int1d(C1h, circle1)(ContC1P*(1./alphaC1P)*(LambdaC1x*c1vi+LambdaC1y*c1vj));
+
+// ------------------------ Projection Matrices ------------------------ 
+varf MTop(u,v) = int1d(Ph, top)(u*v);
+matrix PMat = MTop(ShP, ShP);
+set(PMat, solver=CG, verb=false);
+varf MCirc1(u,v) = int1d(C1h, circle1)(u*v);
+matrix C1Mat = MCirc1(ShC1, ShC1);
+set(C1Mat, solver=CG, verb=false);
+
+// ------------------------ Initialize ------------------------ 
+pxx[]=0; pxxo[]=0;pvx[]=0;pvxo[]=0;pax[]=0;paxo[]=0;
+pEqPlEps=0;pP=0;pSigVM=0; pTemp=T0;
+c1xx[]=0;c1xxo[]=0;[c1vx,c1vy]=[0,vimp];[c1vxo,c1vyo]=[0,vimp];c1ax[]=0;c1axo[]=0;
+c1EqPlEps=0;c1P=0;c1SigVM=0; c1Temp=T0;
+// ------------------------ Energy Conservation Metric ------------------------ 
+real Estart = 0.5*rhoC*int2d(C1h)([c1vx,c1vy]'*[c1vx,c1vy]);
+
+// ------------------------ Sweep Diagnostic Files ------------------------ 
+{ ofstream fEnergy(outdir+saveName+"_Energy.csv"); fEnergy << "nt,KE,EE,TE,Total" << endl; }
+{ ofstream fTraction(outdir+saveName+"_Traction.csv"); fTraction << "nt,TractNP_min,TractNP_max,TractNC1_min,TractNC1_max" << endl; }
+{ ofstream fVonMises(outdir+saveName+"_vonMises.csv"); fVonMises << "nt,plate_maxVM,particle_maxVM" << endl; }
+
+// ------------------------ Start Time Loop ------------------------ 
+for (int nt = 0; nt < steps; nt++){
+// ------------------------ Initialize Contact ------------------------ 
+mesh PhDef = movemesh(Ph,[x+pxx,y+pyy]);
+mesh C1hDef = movemesh(C1h,[x+c1xx,y+c1yy]);
+bool ActiveContact = ContactChecker(Persistence, PhDef, TractNP[], C1hDef, TractNC1[], C2h, TractNC2[]);
+SchwarzNormalTraction(Ph,ShP,top,PMat,TractPx,TractPy,TractNP);
+SchwarzNormalTraction(C1h,ShC1,circle1,C1Mat,TractC1x,TractC1y,TractNC1);
+int SchwarzLoopIters = 0;
+// ------------------------ Schwarz Contact ------------------------ 
+while(true){// --- Begin Schwarz While --- 
+if(ActiveContact){
+// --- Begin Contact Solve --- 
+for (int siters = 0; siters<=SchwarzIter; siters++){
+cout << "Step #: " << nt << " contact detected." << endl;
+ContPC1 = chi(C1hDef)(x+pxx,y+pyy); ContC1P = chi(PhDef)(x+c1xx,y+c1yy);
+// Solve Plate
+SchwarzTransfer(TractC1x,TractC1y,c1xx,c1yy,LambdaPx,LambdaPy,thetaP,alphaPC1,betaPC1,ContPC1);
+NewarkP;
+PlasticBuildTrial
+(pxx,pyy,pxxo,pyyo,pTrace,pP,pSigVMt,pPlEpsXX,pPlEpsYY,pPlEpsZZ,pPlEpsXY, 
+pElEpsXXt,pElEpsYYt,pElEpsZZt,pElEpsXYt, pSigXXt,pSigYYt,pSigZZt,pSigXYt, 
+pSigXX,pSigYY,pSigZZ,pSigXY,pDevXXt,pDevYYt,pDevZZt,pDevXYt,lambdaA,muA);
+PlasticSolve
+(ShP,pEqPlEps,pSigVMt,pTemp,pDevXXt,pDevYYt,pDevZZt,pDevXYt, 
+pDevXX,pDevYY,pDevZZ,pDevXY,pSigXX,pSigYY,pSigZZ,pSigXY,
+pP,pPlEpsXX,pPlEpsYY,pPlEpsZZ,pPlEpsXY,
+rhoA,AA,BA,nJCA,CA,TmA,mA,TQ,CpA,muA)
+SchwarzTractionSolve(Ph,ShP,top,PMat,TractPx,TractPy,pSigXX,pSigYY,pSigXY);
+// Solve Particle 1
+SchwarzTransfer(TractPx,TractPy,pxx,pyy,LambdaC1x,LambdaC1y,thetaC1,alphaC1P,betaC1P,ContC1P);
+NewarkC1;
+PlasticBuildTrial
+(c1xx,c1yy,c1xxo,c1yyo,c1Trace,c1P,c1SigVMt,c1PlEpsXX,c1PlEpsYY,c1PlEpsZZ,c1PlEpsXY, 
+c1ElEpsXXt,c1ElEpsYYt,c1ElEpsZZt,c1ElEpsXYt,c1SigXXt,c1SigYYt,c1SigZZt,c1SigXYt, 
+c1SigXX,c1SigYY,c1SigZZ,c1SigXY,c1DevXXt,c1DevYYt,c1DevZZt,c1DevXYt,lambdaC,muC);
+PlasticSolve
+(ShC1,c1EqPlEps,c1SigVMt,c1Temp,c1DevXXt,c1DevYYt,c1DevZZt,c1DevXYt, 
+c1DevXX,c1DevYY,c1DevZZ,c1DevXY,c1SigXX,c1SigYY,c1SigZZ,c1SigXY,
+c1P,c1PlEpsXX,c1PlEpsYY,c1PlEpsZZ,c1PlEpsXY,
+rhoC,AC,BC,nJCC,CC,TmC,mC,TQ,CpC,muC)
+SchwarzTractionSolve(C1h,ShC1,circle1,C1Mat,TractC1x,TractC1y,c1SigXX,c1SigYY,c1SigXY);
+
+errAbs = sqrt( int2d(Ph)((pxx-pxxPrev)^2+(pyy-pyyPrev)^2)+ int2d(C1h)((c1xx-c1xxPrev)^2+(c1yy-c1yyPrev)^2) );
+// Adding a tiny bit to prevent div by 0
+errRel = errAbs / sqrt( int2d(Ph)(pxx^2+pyy^2) + int2d(C1h)(c1xx^2+c1yy^2) + 1e-30 );
+[pxxPrev,pyyPrev] = [pxx,pyy];
+[c1xxPrev,c1yyPrev] = [c1xx,c1yy];
+if (errRel < RelSchwarzTol){
+cout << "Schwarz converged in " << siters << " steps. AbsErr = " 
+<< errAbs << ". RelErr = " << errRel << endl;
+break;}
+if (siters == SchwarzIter){
+cout << "Schwarz iteration limit reached. AbsErr = " 
+<< errAbs << ". RelErr = " << errRel << endl;
+}
+} // --- End Schwarz For ---
+} // --- End Schwarz If --- 
+else{// --- Begin No Contact Solve --- 
+TractPx = 0; TractPy = 0; TractC1x = 0; TractC1y = 0;
+ContPC1 = 0;   ContC1P = 0;
+// Solve Plate
+NewarkP;
+PlasticBuildTrial
+(pxx,pyy,pxxo,pyyo,pTrace,pP,pSigVMt,pPlEpsXX,pPlEpsYY,pPlEpsZZ,pPlEpsXY, 
+pElEpsXXt,pElEpsYYt,pElEpsZZt,pElEpsXYt, pSigXXt,pSigYYt,pSigZZt,pSigXYt, 
+pSigXX,pSigYY,pSigZZ,pSigXY,pDevXXt,pDevYYt,pDevZZt,pDevXYt, lambdaA,muA);
+PlasticSolve
+(ShP,pEqPlEps,pSigVMt,pTemp,pDevXXt,pDevYYt,pDevZZt,pDevXYt, 
+pDevXX,pDevYY,pDevZZ,pDevXY,pSigXX,pSigYY,pSigZZ,pSigXY,
+pP,pPlEpsXX,pPlEpsYY,pPlEpsZZ,pPlEpsXY,
+rhoA,AA,BA,nJCA,CA,TmA,mA,TQ,CpA,muA)
+// Solve Particle 1
+NewarkC1;
+PlasticBuildTrial
+(c1xx,c1yy,c1xxo,c1yyo,c1Trace,c1P,c1SigVMt,c1PlEpsXX,c1PlEpsYY,c1PlEpsZZ,c1PlEpsXY, 
+c1ElEpsXXt,c1ElEpsYYt,c1ElEpsZZt,c1ElEpsXYt,c1SigXXt,c1SigYYt,c1SigZZt,c1SigXYt,
+c1SigXX,c1SigYY,c1SigZZ,c1SigXY,c1DevXXt,c1DevYYt,c1DevZZt,c1DevXYt,lambdaC,muC);
+PlasticSolve
+(ShC1,c1EqPlEps,c1SigVMt,c1Temp,c1DevXXt,c1DevYYt,c1DevZZt,c1DevXYt, 
+c1DevXX,c1DevYY,c1DevZZ,c1DevXY,c1SigXX,c1SigYY,c1SigZZ,c1SigXY,
+c1P,c1PlEpsXX,c1PlEpsYY,c1PlEpsZZ,c1PlEpsXY,
+rhoC,AC,BC,nJCC,CC,TmC,mC,TQ,CpC,muC)
+}// --- End No Contact Solve --- 
+// --- Begin Schwarz Contact Consistency --- 
+PhDef = movemesh(Ph,[x+pxx,y+pyy]);
+C1hDef = movemesh(C1h,[x+c1xx,y+c1yy]);
+SchwarzNormalTraction(Ph,ShP,top,PMat,TractPx,TractPy,TractNP);
+SchwarzNormalTraction(C1h,ShC1,circle1,C1Mat,TractC1x,TractC1y,TractNC1);
+Persistence = ActiveContact;
+ActiveContact = ContactChecker(Persistence, PhDef, TractNP[], C1hDef, TractNC1[], C2h, TractNC2[]);
+SchwarzLoopIters++;
+if (Persistence == ActiveContact){break;}
+if (SchwarzLoopIters>=SchwarzLoopStop){
+cout << "Schwarz inf loop safety termination" << endl;
+break;
+// --- End Schwarz Contact Consistency --- 
+} // --- End Inf Schwarz Loop Safety --- 
+} // --- End Schwarz While --- 
+// ------------------------ Save Kinematic data ------------------------
+pax[] = pxx[]; pax[] -= pxxo[]; pax[] *= C0; pax[] -= C1*pvxo[]; pax[] -= C2*paxo[];
+pvx[] = pxx[]; pvx[] -= pxxo[]; pvx[] *= C3; pvx[] -= C4*pvxo[]; pvx[] -= C5*paxo[];
+pxxo[] = pxx[]; paxo[] = pax[]; pvxo[] = pvx[];
+c1ax[] = c1xx[]; c1ax[] -= c1xxo[]; c1ax[] *= C0; c1ax[] -= C1*c1vxo[]; c1ax[] -= C2*c1axo[];
+c1vx[] = c1xx[]; c1vx[] -= c1xxo[]; c1vx[] *= C3; c1vx[] -= C4*c1vxo[]; c1vx[] -= C5*c1axo[];
+c1xxo[] = c1xx[]; c1axo[] = c1ax[]; c1vxo[] = c1vx[];
+// ------------------------ Save Experiment data ------------------------ 
+if (nt%3==0){
+		
+	real KE = 0.5*rhoA*int2d(Ph)([pvx,pvy]'*[pvx,pvy])+0.5*rhoC*int2d(C1h)([c1vx,c1vy]'*[c1vx,c1vy]);
+	real EE = 0.5*int2d(Ph)([pSigXX,pSigYY,pSigXY]'*(eps([pxx,pyy])-[pPlEpsXX,pPlEpsYY,pPlEpsXY]))+0.5*int2d(C1h)([c1SigXX,c1SigYY,c1SigXY]'*(eps([c1xx,c1yy])-[c1PlEpsXX,c1PlEpsYY,c1PlEpsXY]));
+	real TE = rhoA*CpA*int2d(Ph)(pTemp-T0)+rhoC*CpC*int2d(C1h)(c1Temp-T0);
+
+	{ ofstream fEnergy(outdir+saveName+"_Energy.csv", append); fEnergy << nt << "," << KE << "," << EE << "," << TE << "," << KE+EE+TE << endl; }
+	{ ofstream fTraction(outdir+saveName+"_Traction.csv", append); fTraction << nt << "," << TractNP[].min << "," << TractNP[].max << "," << TractNC1[].min << "," << TractNC1[].max << endl; }
+	ShP pSigVMField = SigmaVM([pDevXX,pDevYY,pDevZZ,pDevXY]);
+	ShC1 c1SigVMField = SigmaVM([c1DevXX,c1DevYY,c1DevZZ,c1DevXY]);
+	{ ofstream fVonMises(outdir+saveName+"_vonMises.csv", append); fVonMises << nt << "," << pSigVMField[].max << "," << c1SigVMField[].max << endl; }
+
+	cout << "Energy Start" << Estart
+    << "   KE+EE+TE " << KE+EE+TE << endl;
+
+	cout << "Kinetic" << KE
+    << "   Elastic" << EE
+    << "   Thermal" << TE << endl;
+	
+	// Block deformation
+	mesh Combined = PhDef+C1hDef;
+	// Pressure and shear waves 
+	fespace Wh(Combined,P1);
+	Wh pw = (dx(pxx)+dy(pyy))*chi(PhDef)(x,y) + (dx(c1xx)+dy(c1yy))*chi(C1hDef)(x,y);
+	Wh sw = (dy(pxx)-dx(pyy))*chi(PhDef)(x,y) + (dy(c1xx)-dx(c1yy))*chi(C1hDef)(x,y);
+	Wh SigVM = SigmaVM([pDevXX,pDevYY,pDevZZ,pDevXY])*chi(PhDef)(x,y) + SigmaVM([c1DevXX,c1DevYY,c1DevZZ,c1DevXY])*chi(C1hDef)(x,y);
+	Wh Temp = pTemp*chi(PhDef)(x,y) + c1Temp*chi(C1hDef)(x,y);
+		
+	if 		(nt < 10) 	filenum = "000"	+nt;
+	else if (nt < 100) 	filenum = "00"	+nt;
+	else if (nt < 1000)	filenum = "0"   +nt;
+	else 				filenum = nt;
+	
+    savevtk(outdir+saveName+"_"+filenum+".vtu", 
+			Combined, 
+			pw, sw, SigVM, Temp,
+			dataname="PressureWave ShearWave vonMisesStress Temperature",
+			order=vtkorder);
+}// --- End Save Data If ---
+}// --- End Time loop ---

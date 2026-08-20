@@ -1,0 +1,229 @@
+// ----------------------- General Constants -----------------------
+real vimp  	= -500.;	// Impact velocity
+real T0    	= 300.;		// Starting temp
+real TQ  	= 0.9;		// Taylor-Quincy Heat fraction
+real dEps0 	= 1.0;   	// Reference strain rate
+// ----------------------- Newark parameters ----------------------- 
+real gamma 	= 0.9;
+real beta 	= 0.25*(0.5+gamma)^2;
+// ----------------------- Plasticity Newton Solve Parameters ----------------------- 
+int  newtiters 	= 25;
+real newttol 	= 1e-9;
+real YieldFuncTol 	= 0;
+real itertol	= 1e-9; 
+// ----------------------- Material Properties -----------------------
+// ------ Copper ------ 
+real rhoC  	= 8960.; 	// Density
+real EC    	= 117e9; 	// Young's modulus
+real nuC   	= 0.34;  	// Poisson modulus
+real AC    	= 90e6;  	// 1st Johnson-Cook hardening parameter
+real BC    	= 292e6;  	// 2nd Johnson-Cook hardening parameter
+real nJCC  	= 0.31;   	// Johnson-Cook hardening strain exponent
+real CC    	= 0.025;  	// Johnson-Cook rate parameter
+real mC    	= 1.09;   	// Johnson-Cook thermal exponent
+real TmC   	= 1356.;  	// Melting temp
+real CpC   	= 385.;		// Specific heat
+real lambdaC= EC*nuC/((1.+nuC)*(1.-2.*nuC)); 	// Lame parameter: Pa
+real muC 	= EC/(2.*(1.+nuC));				// Lame parameter: Pa
+// ------ Aluminium ------ 
+real rhoA   = 2700.;
+real EA     = 70e9;
+real nuA    = 0.33;
+real AA     = 110e6;
+real BA     = 150e6;
+real nJCA   = 0.36;
+real CA     = 0.001;
+real mA     = 1.34;
+real TmA    = 933.;
+real CpA    = 900.;
+real lambdaA= EA*nuA/((1.+nuA)*(1.-2.*nuA));
+real muA 	= EA/(2.*(1.+nuA));
+// ------ Wave speeds ------ 
+real cPS = sqrt((lambdaC+2*muC)/rhoC);
+real cSS = sqrt(muC/rhoC);
+real aPS = sqrt((lambdaA+2*muA)/rhoA);
+real aSS = sqrt(muA/rhoA);
+// ----------------------- Schwarz DDM parameters ----------------------- 
+int  SchwarzIter   = 20;
+int  SchwarzLoopStop  = 10;
+real RelSchwarzTol = 1e-9;
+real AbsSchwarzTol = 1e-9;
+real errAbs;
+real errRel;
+real alphaPC1 = 1e-6;
+real betaPC1  = 1e0;
+real alphaC1P = 1e-3;
+real betaC1P  = 1e0;
+real thetaP  = 1;
+real thetaC1  = 1;
+bool Persistence = false;
+// ------ Elastic tensor ------ 
+func CElas = [[2*muC+lambdaC,	lambdaC, 		0. ], 
+			 [lambdaC,		2*muC+lambdaC, 	0. ],
+			 [ 0. , 		0. , 			muC ]];
+func AElas = [[2*muA+lambdaA,	lambdaA, 		0. ], 
+			 [lambdaA,		2*muA+lambdaA, 	0. ],
+			 [ 0. , 		0. , 			muA ]];
+// ----------------------- Macros -----------------------
+// ------ Newark Macro ------ 
+macro M(a,p) (a[0]*p[0]+a[1]*p[1]) //
+// ------ Divergence ------ 
+macro div(v) (dx(v[0])+dy(v[1])) //
+// ------ Strain vector ------ 
+macro eps(v) ([dx(v[0]),dy(v[1]),dy(v[0])+dx(v[1])]) //
+// ------ Stress vector ------ 
+macro Sigma(v) (Elas*eps(v)) //
+// ------ Deviatoric Stress ------ 
+macro Dev(p,v) ([v[0]-p, v[1]-p, v[2]-p, v[3]]) //
+// ------ von Mises Stress ------ 
+macro SigmaVM(DevStress) (sqrt(1.5*(DevStress[0]^2+DevStress[1]^2+DevStress[2]^2+2.*DevStress[3]^2))) //
+// ------ Trace of a 3x3 matrix in the Voight notation used consistently here ------ 
+macro ThreeTrace(v) (v[0]+v[1]+v[2]) //
+// ----------------------- Universal Functions -----------------------
+// ------ Newark constants ------ 
+func real c0(real dt, real beta, real gamma){return 1./(beta*dt*dt);}
+func real c1(real dt, real beta, real gamma){return 1./(beta*dt);}
+func real c2(real dt, real beta, real gamma){return 1./(2.*beta) - 1.;}
+func real c3(real dt, real beta, real gamma){return gamma/(beta*dt);}
+func real c4(real dt, real beta, real gamma){return gamma/beta - 1.;}
+func real c5(real dt, real beta, real gamma){return dt*(gamma/(2*beta) - 1.);}
+// ------ Time step size ------ 
+func real TimeStepSize(real GridSize, real Velocity){
+	return GridSize/Velocity;}
+// ----------------------- Contact Functions -----------------------
+// ------ Evaluate if the traction stress is compressive ------ 
+real CompTol = 0;
+func bool Compression(real[int] &Tract){
+	return (Tract.min < -CompTol);}
+// ------ Evaluate if 2 blocks are actively overlapping ------ 
+real OverlapTol = 1e-18;
+func bool Overlap(mesh &Th1, mesh &Th2, mesh &Th3){
+bool Overlap12 = (int2d(Th1)(chi(Th2)(x,y))+int2d(Th2)(chi(Th1)(x,y)) > OverlapTol);
+bool Overlap13 = (int2d(Th1)(chi(Th3)(x,y))+int2d(Th3)(chi(Th1)(x,y)) > OverlapTol);
+bool Overlap23 = (int2d(Th2)(chi(Th3)(x,y))+int2d(Th3)(chi(Th2)(x,y)) > OverlapTol);
+	return ((Overlap12 || Overlap13) || Overlap23);}
+// ------ Boolean to identify active contact between bodies ------ 
+func bool ContactChecker
+(bool Pers, mesh &Th1Def, real[int] &Tract1,
+ mesh &Th2Def, real[int] &Tract2,
+ mesh &Th3Def, real[int] &Tract3){
+	if (Pers){return ((Compression(Tract1) || Compression(Tract2)) || Compression(Tract3));}
+	else {return Overlap(Th1Def,Th2Def,Th3Def);}}
+// ------ Schwarz Information Transfer ------ 
+macro SchwarzTransfer(Transx, Transy, Dirx, Diry, Lambdax, Lambday, theta, alphaS, betaS, Cont)
+{
+Lambdax = (1-theta)*Lambdax; Lambdax = Cont*theta*betaS*Dirx + Lambdax; Lambdax = Lambdax - Cont*theta*alphaS*Transx;
+Lambday = (1-theta)*Lambday; Lambday = Lambday - Cont*theta*alphaS*Transy; Lambday = Cont*theta*betaS*Diry + Lambday;
+} //
+// ------ Schwarz Traction Solve ------ 
+macro SchwarzTractionSolve(Th, Sh, IntRegion, Mat, Tractx, Tracty, SigmaXX, SigmaYY, SigmaXY)
+{
+varf VTx(u,v) = int1d(Th, IntRegion)((SigmaXX*N.x + SigmaXY*N.y)*v);
+varf VTy(u,v) = int1d(Th, IntRegion)((SigmaXY*N.x + SigmaYY*N.y)*v);
+real[int] Tx = VTx(0, Sh); Tractx[] = Mat^-1 * Tx;
+real[int] Ty = VTy(0, Sh); Tracty[] = Mat^-1 * Ty;
+} //
+// ------ Schwarz Normal Traction ------ 
+macro SchwarzNormalTraction(Th, Sh, IntRegion, Mat, Tractx, Tracty, TractN)
+{
+varf VTn(u,v) = int1d(Th, IntRegion)( (Tractx*N.x + Tracty*N.y)*v );
+real[int] Tn = VTn(0, Sh); TractN[] = Mat^-1 * Tn;
+} //
+// ----------------------- Plasticity Functions -----------------------
+// ------ Johnson-Cook Yield Stress ------ 
+func real SigmaY(real A, real B, real nJC, real C, real Eps, real dEps, real T, real Tm, real m){
+	real rateRatio  = max(dEps/dEps0, 1.0);
+  	real theta      = min((T-T0)/(Tm-T0), 1.0);
+  	real Hard	    = A + B*Eps^nJC;
+  	real Rate       = 1.0 + C*log(rateRatio);
+  	real Therm      = 1.0 - theta^m;
+  	return Hard*Rate*Therm;}
+// ------ Yield Function ------ 
+func real YieldFunc(real vonMises, real A, real B, real nJC, real C, real Eps, real dEps, real T, real Tm, real m){
+	return vonMises-SigmaY(A,B,nJC,C,Eps,dEps,T,Tm,m);}
+// ------ Temperature Generated ------ 
+func real TempGen(real rho, real A, real B, real nJC, real C, real Eps, real dEps, real T, real Tm, real m, real TQ, real Cp){
+	return TQ/rho/Cp*dEps*SigmaY(A,B,nJC,C,Eps,dEps,T,Tm,m);}
+// ------ Plasticity Build Field ------ 
+macro PlasticBuildTrial(xx, yy, xxo, yyo, Trace, p, SigVMt, PlEpsXX, PlEpsYY, PlEpsZZ, PlEpsXY, ElEpsXXt, ElEpsYYt, ElEpsZZt, ElEpsXYt, SigXXt, SigYYt, SigZZt, SigXYt, SigXX, SigYY, SigZZ, SigXY, DevXXt, DevYYt, DevZZt, DevXYt, lambda, mu)
+{
+	ElEpsXXt = eps([xx,yy])[0]-eps([xxo,yyo])[0];
+	ElEpsYYt = eps([xx,yy])[1]-eps([xxo,yyo])[1];
+	ElEpsZZt = 0;
+	ElEpsXYt = eps([xx,yy])[2]-eps([xxo,yyo])[2];
+	Trace 	= ThreeTrace([ElEpsXXt,ElEpsYYt,ElEpsZZt,ElEpsXYt]);
+	SigXXt 	= SigXX + lambda*Trace+2.*mu*ElEpsXXt;
+	SigYYt	= SigYY + lambda*Trace+2.*mu*ElEpsYYt;
+	SigZZt	= SigZZ + lambda*Trace+2.*mu*ElEpsZZt;
+	SigXYt	= SigXY + mu*ElEpsXYt;
+	p		= (SigXXt+SigYYt+SigZZt)/3;
+	DevXXt  = Dev(p,[SigXXt,SigYYt,SigZZt,SigXYt])[0];
+	DevYYt	= Dev(p,[SigXXt,SigYYt,SigZZt,SigXYt])[1];
+	DevZZt	= Dev(p,[SigXXt,SigYYt,SigZZt,SigXYt])[2];
+	DevXYt	= Dev(p,[SigXXt,SigYYt,SigZZt,SigXYt])[3];
+	SigVMt	= SigmaVM([DevXXt,DevYYt,DevZZt,DevXYt]);
+} //
+// ------ Plasticity Solve ------ 
+macro PlasticSolve(Sh, EqPlEps, SigVMt, Temp,DevXXt, DevYYt, DevZZt, DevXYt, DevXX, DevYY, DevZZ, DevXY,SigXX, SigYY, SigZZ, SigXY,p, PlEpsXX, PlEpsYY, PlEpsZZ, PlEpsXY,rho, A, B, nJC, C, Tm, m, TQ, Cp, mu)
+{
+for (int i = 0; i < Sh.ndof; i++){
+	real DelG=0; 
+
+	if (YieldFunc(SigVMt[][i],A,B,nJC,C,EqPlEps[][i],0,Temp[][i],Tm,m)>YieldFuncTol){
+		DelG = Newton(SigVMt[][i], EqPlEps[][i], Temp[][i], dt, mu, rho, A, B, nJC, C, Tm, m, TQ, Cp);}
+	if(DelG>0){	
+	EqPlEps[][i] += DelG;
+	DevXX[][i]	 = (1.- 3.*mu*DelG/SigVMt[][i])*DevXXt[][i];
+	DevYY[][i]	 = (1.- 3.*mu*DelG/SigVMt[][i])*DevYYt[][i];
+	DevZZ[][i]	 = (1.- 3.*mu*DelG/SigVMt[][i])*DevZZt[][i];
+	DevXY[][i]	 = (1.- 3.*mu*DelG/SigVMt[][i])*DevXYt[][i];
+	real[int] sn = [DevXX[][i], DevYY[][i], DevZZ[][i], DevXY[][i]];
+	real factor = 1.5*DelG/SigVMt[][i];
+	PlEpsXX[][i] += factor*sn[0];
+	PlEpsYY[][i] += factor*sn[1];
+	PlEpsZZ[][i] += factor*sn[2];
+	PlEpsXY[][i] += 2*factor*sn[3];
+	Temp[][i] 	 += TempGen(rho,A,B,nJC,C,EqPlEps[][i],DelG,Temp[][i],Tm,m,TQ,Cp);
+	SigXX[][i]	 = p[][i] + DevXX[][i];
+	SigYY[][i]	 = p[][i] + DevYY[][i];
+	SigZZ[][i]	 = p[][i] + DevZZ[][i];
+	SigXY[][i]	 = DevXY[][i];}
+	else{
+	DevXX[][i]	 = DevXXt[][i];
+	DevYY[][i]	 = DevYYt[][i];
+	DevZZ[][i]	 = DevZZt[][i];
+	DevXY[][i]	 = DevXYt[][i];
+	SigXX[][i]	 = p[][i] + DevXX[][i];
+	SigYY[][i]	 = p[][i] + DevYY[][i];
+	SigZZ[][i]	 = p[][i] + DevZZ[][i];
+	SigXY[][i]	 = DevXY[][i];}
+	
+}
+} //
+// ------ Newton-Raphson ------ 
+func real Newton(real vmTrial, real epsEqOld, real Told, real dt, real mu,
+                  real rho, real A, real B, real nJC, real C, real Tm, real m, real TQ, real Cp)
+{real dg = 0;
+// --- Start For : Newton --- 
+for (int it = 0; it < newtiters; it++){
+real epsRate = dg/dt;
+real Tguess  = Told + TempGen(rho,A,B,nJC,C,epsEqOld+dg,dg,Told,Tm,m,TQ,Cp);
+real sY      = SigmaY(A,B,nJC,C,epsEqOld+dg,epsRate,Tguess,Tm,m);
+real R       = vmTrial - 3.*mu*dg - sY;
+if (abs(R) < newttol){break;}
+
+real h        = max(dg*1.0e-6, 1.0e-12);
+real epsRateh = (dg+h)/dt;
+real Tguessh  = Told + TempGen(rho,A,B,nJC,C,epsEqOld+dg+h,dg+h,Told,Tm,m,TQ,Cp);
+real sYh      = SigmaY(A,B,nJC,C,epsEqOld+dg+h,epsRateh,Tguessh,Tm,m);
+real Rh       = vmTrial - 3.*mu*(dg+h) - sYh;
+
+real dRdg = (Rh-R)/h;
+if (abs(dRdg) < 1.0e-20){break;}
+
+real dgNew = dg - R/dRdg;
+if (dgNew < 0.0) dgNew = 0.0;
+dg = dgNew;
+if(it==newtiters){cout << "Newton iteration limit reached" << endl;}
+} // --- End For : Newton --- 
+return dg;}// --- End Newton --- 

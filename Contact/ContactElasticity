@@ -28,7 +28,7 @@ func real TimeStepSize(real GridSize, real Velocity){
 // Active Contact functions
 
 // Evaluate if the traction stress is compressive
-real CompTol = 0;
+real CompTol = 1e-12;
 func bool Compression(real[int] &Tract){
 	return (Tract.min < -CompTol);
 }

@@ -7,16 +7,14 @@ include "ColdSprayParameters"
 string outdir = "..//ColdSpray//results//";
 string filenum;
 int[int] vtkorder = [1,1,1,1];
-
+int SaveEvery = 1;
 // ------------------------ Time step ------------------------ 
 real T 		= 50e-9;
 real pMinGridSize = pCFL[].min;
 real c1MinGridSize= c1CFL[].min;
-real dt 	= min(TimeStepSize(pMinGridSize,min(aPS,aSS)),TimeStepSize(c1MinGridSize,min(cPS,cSS)));
+real dt 	= min(TimeStepSize(pMinGridSize,max(aPS,aSS)),TimeStepSize(c1MinGridSize,max(cPS,cSS)));
 real steps 	= T/dt;	
-
-alphaPC1 = dt/(rhoA*aPS);
-alphaC1P = dt/(rhoC*cPS);
+cout << steps << endl;
 // ------------------------ Schwarz Auxillary Fields ------------------------ 
 UhP [pxxPrev,pyyPrev];
 UhC1 [c1xxPrev,c1yyPrev];
@@ -28,13 +26,18 @@ real C3 = c3(dt,beta,gamma);
 real C4 = c4(dt,beta,gamma);
 real C5 = c5(dt,beta,gamma);
 // ------------------------ Newark Integrators ------------------------ 
+real AlphaM = 0.01;
 problem NewarkP([pxx,pyy],[pvi,pvj])
 	= int2d(Ph)(
               	C0*M([pxx,pyy],[pvi,pvj])+
+				AlphaM*C3*M([pxx,pyy],[pvi,pvj])+
 				eps([pxx,pyy])'*AElas*eps([pvi,pvj])
 				)
     - int2d(Ph)(
 				C0*M([pxxo,pyyo],[pvi,pvj]) + C1*M([pvxo,pvyo],[pvi,pvj]) + C2*M([paxo,payo],[pvi,pvj])+
+				AlphaM*(C3*M([pxxo,pyyo],[pvi,pvj]) 
+					  + C4*M([pvxo,pvyo],[pvi,pvj]) 
+					  + C5*M([paxo,payo],[pvi,pvj]))+
 				eps([pxxo,pyyo])'*AElas*eps([pvi,pvj])
 				)
 	+ int2d(Ph)([pSigXX,pSigYY,pSigXY]'*eps([pvi,pvj]))
@@ -45,10 +48,14 @@ problem NewarkP([pxx,pyy],[pvi,pvj])
 problem NewarkC1([c1xx,c1yy],[c1vi,c1vj])
 	= int2d(C1h)(
               	C0*M([c1xx,c1yy],[c1vi,c1vj])+
+				AlphaM*C3*M([c1xx,c1yy],[c1vi,c1vj])+
 				eps([c1xx,c1yy])'*CElas*eps([c1vi,c1vj])
 				)
     - int2d(C1h)(
 				C0*M([c1xxo,c1yyo],[c1vi,c1vj]) + C1*M([c1vxo,c1vyo],[c1vi,c1vj]) + C2*M([c1axo,c1ayo],[c1vi,c1vj])+
+				AlphaM*(C3*M([c1xxo,c1yyo],[c1vi,c1vj]) 
+					  + C4*M([c1vxo,c1vyo],[c1vi,c1vj]) 
+					  + C5*M([c1axo,c1ayo],[c1vi,c1vj]))+
 				eps([c1xxo,c1yyo])'*CElas*eps([c1vi,c1vj])
 				)
 	+ int2d(C1h)([c1SigXX,c1SigYY,c1SigXY]'*eps([c1vi,c1vj]))
@@ -70,13 +77,13 @@ c1xx[]=0;c1xxo[]=0;[c1vx,c1vy]=[0,vimp];[c1vxo,c1vyo]=[0,vimp];c1ax[]=0;c1axo[]=
 c1EqPlEps=0;c1P=0;c1SigVM=0; c1Temp=T0;
 // ------------------------ Energy Conservation Metric ------------------------ 
 real Estart = 0.5*rhoC*int2d(C1h)([c1vx,c1vy]'*[c1vx,c1vy]);
-
 // ------------------------ Start Time Loop ------------------------ 
 for (int nt = 0; nt < steps; nt++){
+real maxSigVM = max(pSigVMt[].max,c1SigVMt[].max,1);
 // ------------------------ Initialize Contact ------------------------ 
 mesh PhDef = movemesh(Ph,[x+pxx,y+pyy]);
 mesh C1hDef = movemesh(C1h,[x+c1xx,y+c1yy]);
-bool ActiveContact = ContactChecker(Persistence, PhDef, TractNP[], C1hDef, TractNC1[], C2h, TractNC2[]);
+bool ActiveContact = false;//ContactChecker(Persistence, PhDef, TractNP[], C1hDef, TractNC1[], C2h, TractNC2[]);
 SchwarzNormalTraction(Ph,ShP,top,PMat,TractPx,TractPy,TractNP);
 SchwarzNormalTraction(C1h,ShC1,circle1,C1Mat,TractC1x,TractC1y,TractNC1);
 int SchwarzLoopIters = 0;
@@ -124,7 +131,7 @@ errRel = errAbs / sqrt( int2d(Ph)(pxx^2+pyy^2) + int2d(C1h)(c1xx^2+c1yy^2) + 1e-
 //}// --- End Crude 2 State Loop Breaker --- 
 [pxxPrev,pyyPrev] = [pxx,pyy];
 [c1xxPrev,c1yyPrev] = [c1xx,c1yy];
-if (errRel < RelSchwarzTol){
+if (siters != 0 && errRel < RelSchwarzTol){
 cout << "Schwarz converged in " << siters << " steps. AbsErr = " 
 << errAbs << ". RelErr = " << errRel << endl;
 break;}
@@ -183,7 +190,7 @@ c1ax[] = c1xx[]; c1ax[] -= c1xxo[]; c1ax[] *= C0; c1ax[] -= C1*c1vxo[]; c1ax[] -
 c1vx[] = c1xx[]; c1vx[] -= c1xxo[]; c1vx[] *= C3; c1vx[] -= C4*c1vxo[]; c1vx[] -= C5*c1axo[];
 c1xxo[] = c1xx[]; c1axo[] = c1ax[]; c1vxo[] = c1vx[];
 // ------------------------ Save Experiment data ------------------------ 
-if (nt%3==0){
+if (nt%SaveEvery==0){
 		
 	real KE = 0.5*rhoA*int2d(Ph)([pvx,pvy]'*[pvx,pvy])+0.5*rhoC*int2d(C1h)([c1vx,c1vy]'*[c1vx,c1vy]);
 	real EE = 0.5*int2d(Ph)([pSigXX,pSigYY,pSigXY]'*(eps([pxx,pyy])-[pPlEpsXX,pPlEpsYY,pPlEpsXY]))+0.5*int2d(C1h)([c1SigXX,c1SigYY,c1SigXY]'*(eps([c1xx,c1yy])-[c1PlEpsXX,c1PlEpsYY,c1PlEpsXY]));
