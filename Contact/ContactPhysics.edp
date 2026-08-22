@@ -31,12 +31,12 @@ real steps 	= T/dt;
 int[int] vtkorder = [1,1];
 
 // Beta Newark parameters
-real gamma 	= 0.5;
+real gamma 	= 0.9;
 real beta 	= 0.25*(0.5+gamma)^2;
 
 // Rayleigh dampening terms
-real AlphaM 	= 0.005;
-real AlphaK 	= 0.005;
+real AlphaM 	= 0.00;
+real AlphaK 	= 0.00;
 
 // Newark constants
 real C0 = c0(dt,beta,gamma);
@@ -55,9 +55,9 @@ real errRel;
 int  SchwarzLoopStop  = 10;
 
 // Schwarz Robin parameters
-real alpha12 = 5e-3;
+real alpha12 = 1e-3;
 real beta12  = 1.0;
-real alpha21 = 5e-3;
+real alpha21 = 1e-3;
 real beta21  = 1.0;
 real theta1  = 1;
 real theta2  = 1;
@@ -296,14 +296,14 @@ for (int nt = 0; nt < steps; nt++){
 		else if (nt < 1000)	filenum = "0"   +nt;
 		else 				filenum = nt;
 	
-    	savevtk(outdir+"NTestContact"+filenum+".vtu", 
+    	savevtk(outdir+"DissipativeNewarkContact"+filenum+".vtu", 
 				Combined, 
 				pwd, swd, 
 				dataname="PressureWave ShearWave",
 				order=vtkorder);
-    	savevtk(outdir+"NTestNoDefContact"+filenum+".vtu", 
+    	savevtk(outdir+"DissipativeNewarkNoDefContact"+filenum+".vtu", 
 				CombNoDef,
-				pw, sw, 
+				pw, sw,
 				dataname="PressureWave ShearWave",
 				order=vtkorder);
 	}
