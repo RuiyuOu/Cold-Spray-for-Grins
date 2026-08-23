@@ -12,7 +12,7 @@ macro eps(v) ([dx(v[0]),dy(v[1]),dy(v[0])+dx(v[1])]) //
 macro M(a,p) (a[0]*p[0]+a[1]*p[1]) //
 macro K(a,p) (eps(a)'*Elas*eps(p)) //
 
-// Beta Newmark constants
+// Newark Constants
 func real c0(real dt, real beta, real gamma){return 1./(beta*dt*dt);}
 func real c1(real dt, real beta, real gamma){return 1./(beta*dt);}
 func real c2(real dt, real beta, real gamma){return 1./(2.*beta) - 1.;}
