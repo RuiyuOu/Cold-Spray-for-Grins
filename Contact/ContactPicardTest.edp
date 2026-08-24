@@ -1,3 +1,18 @@
+// --------------- The entire file (with a few adjustements) are made by GenAI
+// --------------- This is mainly a proof of concept that it could be done
+// --------------- Pretty much all the Picard iteration formulas are wrong
+// --------------- It should still converge at small times
+// --------------- And it appears to converge decently well
+
+// --------------- What is being tested:
+// --------------- The on(...) Dirichlet BC for FreeFEM must apply to the 
+// --------------- entire boundary. The issue then is how to enforce 
+// --------------- Dirichlet on the contact surface, and then a "do-nothing"
+// --------------- Neumann everywhere else. So the idea is to mask the boundary,
+// --------------- hard Dirichlet on the contact surface, and then 
+// --------------- a Picard iteration for the "do-nothing" portion in the form
+// --------------- of a Dirichlet. 
+
 load "iovtk"
 include "ContactGeometry.idp"
 include "ContactElasticity.idp"
@@ -142,10 +157,6 @@ for (int n = 0; n < steps; n++)
     while (PicardRes > PicardTol && PicardIt < PicardMaxIt)
     {
         BetaNewark;
-
-// --------------- None of the formulas here are correct ----------------
-// --------------- The entire file (with a few adjustements) are made by GenAI
-// --------------- This is mainly a proof of concept that it could be done
 
         // sigma_yy = lambda*eps_xx + (2*mu+lambda)*eps_yy, from Elas*eps(u)
         sigmaYY = lambda*dx(pxx) + (2.*mu+lambda)*dy(pyy);
