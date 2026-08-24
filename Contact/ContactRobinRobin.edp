@@ -29,6 +29,7 @@ real steps 	= T/dt;
 
 // Data order
 int[int] vtkorder = [1,1];
+int[int] vtkorder2 = [1,1,1];
 
 // Beta Newark parameters
 real gamma 	= 0.9;
@@ -289,7 +290,7 @@ for (int nt = 0; nt < steps; nt++){
 		fespace Dh(CombNoDef, P1);
 		Dh pw = (dx(pxx)+dy(pyy))*chi(Ph)(x,y) + (dx(cxx)+dy(cyy))*chi(Ch)(x,y);
 		Dh sw = (dy(pxx)-dx(pyy))*chi(Ph)(x,y) + (dy(cxx)-dx(cyy))*chi(Ch)(x,y);
-
+		Dh Traction = TractNP*ContP+TractNC*ContC;
 
 		if 		(nt < 10) 	filenum = "000"	+nt;
 		else if (nt < 100) 	filenum = "00"	+nt;
@@ -303,8 +304,8 @@ for (int nt = 0; nt < steps; nt++){
 				order=vtkorder);
     	savevtk(outdir+"DissipativeNewarkNoDefContact"+filenum+".vtu", 
 				CombNoDef,
-				pw, sw,
-				dataname="PressureWave ShearWave",
-				order=vtkorder);
+				pw, sw, Traction, 
+				dataname="PressureWave ShearWave PlateTraction, ParticleTraction",
+				order=vtkorder2);
 	}
 }
