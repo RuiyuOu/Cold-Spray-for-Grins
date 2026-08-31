@@ -7,13 +7,13 @@ string filenum;
 
 // We will be assuming a density of 1kg/m^3
 real E 		= 1E3; 	// Young's modulus: kg/m/s^2
-real nu 	= 0.3;	// Poisson modulus: 1
+real nu 	= 0.49;	// Poisson modulus: 1
 
 real lambda = E*nu/((1.+nu)*(1.-2.*nu)); 	// Lame parameter: Pa
 real mu 	= E/(2.*(1.+nu));				// Lame parameter: Pa
 
 real muK = 3E-2;
-mu = muK*mu;
+mu = 1*mu;
 
 // Elastic tensor
 func Elas = [[2*mu+lambda,	lambda, 		0. ], 
@@ -25,8 +25,8 @@ real beta 	= 0.25;
 real gamma 	= 0.5;
 
 // Rayleigh dampening terms
-real AlphaM 	= 0.01;
-real AlphaK 	= 0.01;
+real AlphaM 	= 0.00;
+real AlphaK 	= 0.00;
 
 // Wave speeds
 real ps = sqrt((lambda+2*mu));
@@ -51,6 +51,11 @@ pvxo[] 	= 0;
 pax[]	= 0;
 paxo[]	= 0;
 
+UhP [pxxt,pyyt];
+UhP [pvxt,pvyt];
+UhP [paxt,payt];
+UhP [Fx, Fy];
+
 int[int] vtkorder = [1,1,1];
 
 real C0 = c0(dt,beta,gamma);
@@ -59,6 +64,17 @@ real C2 = c2(dt,beta,gamma);
 real C3 = c3(dt,beta,gamma);
 real C4 = c4(dt,beta,gamma);
 real C5 = c5(dt,beta,gamma);
+
+real PicardTol    = 2e-2;int  PicardMaxIt  = 10; 
+real PicardOmega  = 1;
+
+varf MPlate([ux,uy],[vx,vy]) = int2d(Ph)(M([ux,uy],[vx,vy]));
+matrix PM = MPlate(UhP, UhP);
+varf KPlate([ux,uy],[vx,vy]) = int2d(Ph)(K([ux,uy],[vx,vy]));
+matrix PK = KPlate(UhP,UhP);
+matrix PC = AlphaM*PM+AlphaK*PK;
+matrix PKBar = C0*PM+C3*PC+PK;
+set(PKBar, solver=CG, verb=false);
 
 problem BetaNewark([pxx,pyy],[pvi,pvj])
 	= int2d(Ph)(
@@ -79,16 +95,37 @@ problem BetaNewark([pxx,pyy],[pvi,pvj])
 					  + C5*K([paxo,payo],[pvi,pvj]))+
 				g*pvj
 				)
-    + on(bottom, pyy=0);
+	// Picard iteration on the top boundary. 
+    + on(top,  pyy =pyyt)
+    + on(bottom, pxx=0, pyy=0)
+	+ on(left, pxx=0)
+	+ on(right, pxx=0);
 
 real EStart = int2d(Ph)(-g*y);
 
 for (int n = 0; n < steps; n++)
 {
-    real t  = (n+1)*dt;
+    pyyt = pyyo + dt*pvyo+ dt/2*(1-2*beta)*payo;
+    real PicardRes = 1e30;
+    int  PicardIt  = 0;
+    while (PicardRes > PicardTol && PicardIt < PicardMaxIt)
+    {
+        BetaNewark;
 
-    BetaNewark;
-	
+		// Fix this part
+		[Fx,Fy] = [0,g];
+		[Fx,Fy] += PM*[paxo,payo];
+		[Fx,Fy] += PC*[pvxo,pvyo];
+		[Fx,Fy] += PK*[pxxo,pyyo];
+
+		[pxxt,pyyt] = PKBar^-1 * [Fx,Fy];
+
+        PicardIt++;
+    }
+    if (PicardIt >= PicardMaxIt)
+        cout << "WARNING: Picard did not converge at step " << n
+             << ", residual = " << PicardRes << endl;
+
 	// Update the fields
 
     // New acceleration from Newmark
@@ -119,19 +156,19 @@ for (int n = 0; n < steps; n++)
 		else 				filenum = n;
 			
 		// Block deformation
-		mesh PhDeformed = movemesh(Ph, [x+pxx, y+pyy]);
+		mesh PhDeformed = movemesh(Ph, [x+100*pxx, y+100*pyy]);
 		// Pressure and shear waves 
 		pw = dx(pxx)+dy(pyy);
 		sw = dy(pxx)-dx(pyy);
 
 		real KE = 0.5*int2d(Ph)([pvx,pvy]'*[pvx,pvy]);
 		real EE = 0.5*int2d(Ph)(eps([pxx,pyy])'*Elas*eps([pxx,pyy]));
-		real GE = int2d(PhDeformed)(-g*y);
+		real GE = int2d(Ph)(-g*y);
 
 		cout << "EStart " << EStart << endl;
 		cout << "KE+EE+GE " << KE+EE+GE << endl;
 
-    	savevtk(outdir+"betanewark"+filenum+".vtu", 
+    	savevtk(outdir+"Picard"+filenum+".vtu", 
 				PhDeformed, 
 				[pxx,pyy], pw, sw, 
 				dataname="displacement pressurewave shearwave",

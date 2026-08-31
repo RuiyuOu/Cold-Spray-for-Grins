@@ -1,0 +1,14 @@
+load "msh3"
+include "ContactGeometry.idp" 
+
+// Border to Border 
+meshL PL = extract(Ph);
+meshL CL = extract(Ch);
+fespace PLh(PL,P1);
+PLh Dist, SignDist, ProjX, ProjY;
+Dist = dist(CL);
+SignDist = signeddist(CL);
+ProjX = projection(CL).x-x;
+ProjY = projection(CL).y-y;
+plot(Dist,CL,PL,wait=1);
+plot([ProjX,ProjY],CL,PL,wait=1);

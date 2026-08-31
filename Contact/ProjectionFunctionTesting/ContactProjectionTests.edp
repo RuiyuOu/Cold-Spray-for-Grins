@@ -1,0 +1,93 @@
+load "msh3"
+include "ContactGeometry.idp" 
+
+meshL PL = extract(Ph);
+meshL CL = extract(Ch);
+mesh MovedCh = movemesh(Ch,[x,y-0.7]);
+meshL MovedCL = movemesh(CL,[x,y-0.7]);
+real[int] InteriorPoint = [2.5, -0.03];
+real[int] BoundaryPoint = [2.5, 0];
+
+// Border to Border - NonOverlapping
+meshL CombinedBordersN = PL+CL;
+fespace BBN(PL,P1);
+BBN DistBBN = dist(CL);
+BBN ProjXBBN = projection(CL).x-x;
+BBN ProjYBBN = projection(CL).y-y;
+//plot([ProjX,ProjY],value=true,fill=true,wait=true);
+//plot(Dist,[ProjX,ProjY],CombinedBordersN,value=true,fill=true,wait=true);
+cout << "BBN Distance of point on mesh " << DistBBN(BoundaryPoint[0],BoundaryPoint[1]) << endl; 
+cout << "BBN Vector of point on mesh (" << ProjXBBN(BoundaryPoint[0],BoundaryPoint[1]) << " , " << ProjYBBN(BoundaryPoint[0],BoundaryPoint[1]) << " ) " << endl;
+
+// Border to Border - Overlapping
+meshL CombinedBordersO = PL+MovedCL;
+fespace BBO(PL,P1);
+BBO DistBBO = dist(MovedCL);
+BBO ProjXBBO = projection(MovedCL).x-x;
+BBO ProjYBBO = projection(MovedCL).y-y;
+//plot([ProjX,ProjY],value=true,fill=true,wait=true);
+//plot(Dist,[ProjX,ProjY],CombinedBordersO,value=true,fill=true,wait=true);
+cout << "BBO Distance of point on mesh " << DistBBO(BoundaryPoint[0],BoundaryPoint[1]) << endl; 
+cout << "BBO Vector of point on mesh (" << ProjXBBO(BoundaryPoint[0],BoundaryPoint[1]) << " , " << ProjYBBO(BoundaryPoint[0],BoundaryPoint[1]) << " ) " << endl;
+
+// Mesh to Border - NonOverlapping
+fespace MBN(Ph,P1);
+MBN DistMBN = dist(CL);
+MBN ProjXMBN = projection(CL).x-x;
+MBN ProjYMBN = projection(CL).y-y;
+plot(DistMBN,CL,value=true,fill=true,wait=true,svg="MBN_Dist.svg");
+plot([ProjXMBN,ProjYMBN],CL,value=true,wait=true,ShowMeshes=false,boundary=true,ArrowSize=1,svg="MBN_Vect.svg");
+cout << "MBN Distance of point on mesh " << DistMBN(BoundaryPoint[0],BoundaryPoint[1]) << endl; 
+cout << "MBN Vector of point on mesh (" << ProjXMBN(BoundaryPoint[0],BoundaryPoint[1]) << " , " << ProjYMBN(BoundaryPoint[0],BoundaryPoint[1]) << " ) " << endl;
+
+// Mesh to Border - Overlapping
+fespace MBO(Ph,P1);
+MBO DistMBO = dist(MovedCL);
+MBO ProjXMBO = projection(MovedCL).x-x;
+MBO ProjYMBO = projection(MovedCL).y-y;
+plot(DistMBO,MovedCL,value=true,fill=true,wait=true,svg="MBO_Dist.svg");
+plot([ProjXMBO,ProjYMBO],MovedCL,value=true,wait=true,ShowMeshes=false,boundary=true,ArrowSize=1,svg="MBO_Vect.svg");
+cout << "MBO Distance of point within mesh " << DistMBO(InteriorPoint[0],InteriorPoint[1]) << endl; 
+cout << "MBO Vector of point within mesh (" << ProjXMBO(InteriorPoint[0],InteriorPoint[1]) << " , " << ProjYMBO(InteriorPoint[0],InteriorPoint[1]) << " ) " << endl;
+
+// Border to Mesh - NonOverlapping
+fespace BMN(PL,P1);
+BMN DistBMN = dist(Ch);
+BMN ProjXBMN = projection(Ch).x-x;
+BMN ProjYBMN = projection(Ch).y-y;
+plot(DistBMN,CL,value=true,fill=true,wait=true,svg="BMN_Dist.svg");
+//plot([ProjXBMN,ProjYBMN],Ch,value=true,wait=true,ShowMeshes=false,boundary=true,ArrowSize=1,svg="BMN_Vect.svg");
+cout << "BMN Distance of point on mesh " << DistBMN(BoundaryPoint[0],BoundaryPoint[1]) << endl; 
+cout << "BMN Vector of point on mesh (" << ProjXBMN(BoundaryPoint[0],BoundaryPoint[1]) << " , " << ProjYBMN(BoundaryPoint[0],BoundaryPoint[1]) << " ) " << endl;
+
+// Border to Mesh - Overlapping
+fespace BMO(PL,P1);
+BMO DistBMO = dist(MovedCh);
+BMO ProjXBMO = projection(MovedCh).x-x;
+BMO ProjYBMO = projection(MovedCh).y-y;
+plot(DistBMO,MovedCL,value=true,fill=true,wait=true,svg="BMO_Dist.svg");
+//plot([ProjXBMO,ProjYBMO],MovedCh,value=true,wait=true,ShowMeshes=false,boundary=true,ArrowSize=1,svg="BMO_Vect.svg");
+cout << "BMO Distance of point within mesh " << DistBMO(InteriorPoint[0],InteriorPoint[1]) << endl; 
+cout << "BMO Vector of point within mesh (" << ProjXBMO(InteriorPoint[0],InteriorPoint[1]) << " , " << ProjYBMO(InteriorPoint[0],InteriorPoint[1]) << " ) " << endl;
+
+// Mesh to Mesh - NonOverlapping
+mesh MMNMesh = Ph+Ch;
+fespace MMN(Ph,P1);
+MMN DistMMN = dist(Ch);
+MMN ProjXMMN = projection(Ch).x-x;
+MMN ProjYMMN = projection(Ch).y-y;
+plot(DistMMN,MMNMesh,value=true,fill=true,wait=true,svg="MMN_Dist.svg");
+plot([ProjXMMN,ProjYMMN],MMNMesh,value=true,wait=true,ShowMeshes=false,boundary=true,ArrowSize=1,svg="MMN_Vect.svg");
+cout << "MMN Distance of point on mesh " << DistMMN(BoundaryPoint[0],BoundaryPoint[1]) << endl; 
+cout << "MMN Vector of point on mesh (" << ProjXMMN(BoundaryPoint[0],BoundaryPoint[1]) << " , " << ProjYMMN(BoundaryPoint[0],BoundaryPoint[1]) << " ) " << endl;
+
+// Mesh to Mesh - Overlapping
+mesh MMOMesh = Ph+MovedCh;
+fespace MMO(Ph,P1);
+MMO DistMMO = dist(MovedCh);
+MMO ProjXMMO = projection(MovedCh).x-x;
+MMO ProjYMMO = projection(MovedCh).y-y;
+plot(DistMMO,MMOMesh,value=true,fill=true,wait=true,svg="MMO_Dist.svg");
+plot([ProjXMMO,ProjYMMO],MMOMesh,value=true,wait=true,ShowMeshes=false,boundary=true,ArrowSize=1,svg="MMO_Vect.svg");
+cout << "MMO Distance of point within mesh " << DistMMO(InteriorPoint[0],InteriorPoint[1]) << endl; 
+cout << "MMO Vector of point within mesh (" << ProjXMMO(InteriorPoint[0],InteriorPoint[1]) << " , " << ProjYMMO(InteriorPoint[0],InteriorPoint[1]) << " ) " << endl;

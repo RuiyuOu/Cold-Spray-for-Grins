@@ -5,6 +5,8 @@ include "ContactElasticity.idp"
 string outdir = "..//Contact//results//";
 string filenum;
 
+mesh CombNoDef  = Ph+Ch;
+
 // We will be assuming a density of 1kg/m^3
 real E 		= 1E3; 	// Young's modulus: kg/m/s^2
 real nu 	= 0.45;	// Poisson modulus: 1
@@ -29,6 +31,7 @@ real steps 	= T/dt;
 
 // Data order
 int[int] vtkorder = [1,1];
+int[int] vtkorder2 = [1,1,1];
 
 // Beta Newark parameters
 real gamma 	= 0.9;
@@ -48,51 +51,35 @@ real AlphaK 	= 0.00;
 
 // Matrices 
 varf MPlate([ux,uy],[vx,vy]) = int2d(Ph)(M([ux,uy],[vx,vy]));
-matrix PM = MPlate(UhP, UhP);
-set(PM, solver=CG, verb=false);
 varf MParticle([ux,uy],[vx,vy]) = int2d(Ch)(M([ux,uy],[vx,vy]));
-matrix CM = MParticle(UhC, UhC);
-set(CM, solver=CG, verb=false);
 varf KPlate([ux,uy],[vx,vy]) = int2d(Ph)(K([ux,uy],[vx,vy]));
-matrix PK = KPlate(UhP,UhP);
-set(PK, solver=CG, verb=false);
 varf KParticle([ux,uy],[vx,vy]) = int2d(Ch)(K([ux,uy],[vx,vy]));
-matrix CK = KPlate(UhC,UhC);
-set(CK, solver=CG, verb=false);
-matrix PC = AlphaM*PM+AlphaK*PK;
-set(PC, solver=CG, verb=false);
-matrix CC = AlphaM*CM+AlphaK*CK;
-set(CC, solver=CG, verb=false);
-matrix PKBar = C0*PM+C3*PC+PK;
-set(PKBar, solver=CG, verb=false);
-matrix CKBar = C0*CM+C3*CC+CK;
-set(CKBar, solver=CG, verb=false);
 
-varf LMatCtoP(u,v) = int1d(Ph,top)(u*v);
-matrix LCP =LMatCtoP(ShP,ShC);
-set(LCP, solver=CG, verb=false);
-varf LMatPtoC(u,v) = int1d(Ch,circle)(u*v);
-matrix LPC =LMatPtoC(ShP,ShC);
-set(LPC, solver=CG, verb=false);
-varf WMat(u,v) = int1d(Ch,circle)(u*v);
-matrix W = WMat(ShC,ShC);
-set(W, solver=CG, verb=false);
-varf HMat(u,v) = int1d(Ch,circle)(u*v);
-matrix H = HMat(ShC,ShC);
-set(H, solver=CG, verb=false);
+macro UpdatePersistence(Pers, Cont)(Pers=Cont;) //
+real CompressionTol = -1e9;
+macro UpdateContact(Cont, Traction) (Cont = (Traction < CompressionTol)) //
+
+real EStart = int2d(Ph)(-g*y) + int2d(Ch)(-g*y); 
 
 for (int nt = 0; nt < steps; nt++){
+
+	// initialize for ALE
+	
+	// Solve physics
+
+	// Save data and move mesh
+
+	
 
 	//Save data
 	if (nt%5==0){
 		
 		// Block deformation
-		mesh Combined 	= PhDef+ChDef;
-		mesh CombNoDef  = Ph+Ch;
+		mesh Combined 	= Ph+Ch;
 
-		real KE = 0.5*int2d(Ph)([pvx,pvy]'*[pvx,pvy])+0.5*int2d(Ch)([cvx,cvy]'*[cvx,cvy]);
+		real KE = 0.5*int2d(Combined)([pvx,pvy]'*[pvx,pvy]*chi(Ph)(x,y)+[cvx,cvy]'*[cvx,cvy]*chi(Ch)(x,y));
 		real PE = int2d(Combined)(-g*y);
-		real EE = 0.5*int2d(Ph)(eps([pxx,pyy])'*Elas*eps([pxx,pyy]))+0.5*int2d(Ch)(eps([cxx,cyy])'*Elas*eps([cxx,cyy]));
+		real EE = 0.5*int2d(Combined)(eps([pxx,pyy])'*Elas*eps([pxx,pyy])*chi(Ph)(x,y)+eps([cxx,cyy])'*Elas*eps([cxx,cyy])*chi(Ch)(x,y));
 
 		cout << "Estart " << EStart
 		<< " KE " << KE
@@ -102,28 +89,18 @@ for (int nt = 0; nt < steps; nt++){
 
 		// Pressure and shear waves 
 		fespace Wh(Combined, P1);
-		Wh pwd = (dx(pxx)+dy(pyy))*chi(PhDef)(x,y) + (dx(cxx)+dy(cyy))*chi(ChDef)(x,y);
-		Wh swd = (dy(pxx)-dx(pyy))*chi(PhDef)(x,y) + (dy(cxx)-dx(cyy))*chi(ChDef)(x,y);
-	
-		fespace Dh(CombNoDef, P1);
-		Dh pw = (dx(pxx)+dy(pyy))*chi(Ph)(x,y) + (dx(cxx)+dy(cyy))*chi(Ch)(x,y);
-		Dh sw = (dy(pxx)-dx(pyy))*chi(Ph)(x,y) + (dy(cxx)-dx(cyy))*chi(Ch)(x,y);
-		Dh Traction = TractNP*ContP+TractNC*ContC;
+		Wh pwd = (dx(pxx)+dy(pyy))*chi(Ph)(x,y) + (dx(cxx)+dy(cyy))*chi(Ch)(x,y);
+		Wh swd = (dy(pxx)-dx(pyy))*chi(Ph)(x,y) + (dy(cxx)-dx(cyy))*chi(Ch)(x,y);
 
 		if 		(nt < 10) 	filenum = "000"	+nt;
 		else if (nt < 100) 	filenum = "00"	+nt;
 		else if (nt < 1000)	filenum = "0"   +nt;
 		else 				filenum = nt;
 	
-    	savevtk(outdir+"DissipativeNewarkContact"+filenum+".vtu", 
+    	savevtk(outdir+"MatVecContact"+filenum+".vtu", 
 				Combined, 
 				pwd, swd, 
 				dataname="PressureWave ShearWave",
 				order=vtkorder);
-    	savevtk(outdir+"DissipativeNewarkNoDefContact"+filenum+".vtu", 
-				CombNoDef,
-				pw, sw, Traction, 
-				dataname="PressureWave ShearWave PlateTraction, ParticleTraction",
-				order=vtkorder2);
 	}
 }
