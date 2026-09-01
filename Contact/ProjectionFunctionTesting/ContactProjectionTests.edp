@@ -14,8 +14,8 @@ fespace BBN(PL,P1);
 BBN DistBBN = dist(CL);
 BBN ProjXBBN = projection(CL).x-x;
 BBN ProjYBBN = projection(CL).y-y;
-//plot([ProjX,ProjY],value=true,fill=true,wait=true);
-//plot(Dist,[ProjX,ProjY],CombinedBordersN,value=true,fill=true,wait=true);
+plot(DistBBN,CL,value=true,fill=true,wait=true,svg="BBN_Dist.svg");
+//plot([ProjXBBN,ProjYBBN],CL,value=true,wait=true,ShowMeshes=false,boundary=true,ArrowSize=1,svg="BBN_Vect.svg");
 cout << "BBN Distance of point on mesh " << DistBBN(BoundaryPoint[0],BoundaryPoint[1]) << endl; 
 cout << "BBN Vector of point on mesh (" << ProjXBBN(BoundaryPoint[0],BoundaryPoint[1]) << " , " << ProjYBBN(BoundaryPoint[0],BoundaryPoint[1]) << " ) " << endl;
 
@@ -25,8 +25,8 @@ fespace BBO(PL,P1);
 BBO DistBBO = dist(MovedCL);
 BBO ProjXBBO = projection(MovedCL).x-x;
 BBO ProjYBBO = projection(MovedCL).y-y;
-//plot([ProjX,ProjY],value=true,fill=true,wait=true);
-//plot(Dist,[ProjX,ProjY],CombinedBordersO,value=true,fill=true,wait=true);
+plot(DistBBO,MovedCL,value=true,fill=true,wait=true,svg="BBO_Dist.svg");
+//plot([ProjXBBO,ProjYBBO],MovedCL,value=true,wait=true,ShowMeshes=false,boundary=true,ArrowSize=1,svg="BBO_Vect.svg");
 cout << "BBO Distance of point on mesh " << DistBBO(BoundaryPoint[0],BoundaryPoint[1]) << endl; 
 cout << "BBO Vector of point on mesh (" << ProjXBBO(BoundaryPoint[0],BoundaryPoint[1]) << " , " << ProjYBBO(BoundaryPoint[0],BoundaryPoint[1]) << " ) " << endl;
 

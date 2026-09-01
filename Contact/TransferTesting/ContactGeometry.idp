@@ -1,0 +1,54 @@
+int bottom = 1;
+int right = 2;
+int top = 3;
+int left = 4;
+int circle = 5;
+
+int nn = 10;
+
+border S1(t=0,1){ x=5*t;   y=-1;   label=bottom; }
+border S2(t=0,1){ x=5;   y=-1+t;   label=right; }
+border S3(t=0,1){ x=5-5*t; y=0;   label=top; }
+border S4(t=0,1){ x=0;   y=-1*t; label=left; }
+border S5(t=0,2*3.14159265){x=2.5+0.5*cos(t); y=1+0.5*sin(t); label=circle;}
+
+mesh Ph = buildmesh(S1(5*nn)+S2(nn)+S3(5*nn)+S4(nn));
+mesh Ch = buildmesh(S5(3*nn));
+
+// Vector spaces
+fespace UhP(Ph,[P1,P1]);
+UhP [pxx,pyy];
+UhP [pxxo,pyyo];
+UhP [pOriX,pOriY]=[x,y];
+UhP [pvx,pvy];
+UhP [pvxo,pvyo];
+UhP [pax,pay];
+UhP [paxo,payo];
+UhP [pvi,pvj];
+fespace UhC(Ch,[P1,P1]);
+UhC [cxx,cyy];
+UhC [cxxo,cyyo];
+UhP [cOriX,cOriY]=[x,y];
+UhC [cvx,cvy];
+UhC [cvxo,cvyo];
+UhC [cax,cay];
+UhC [caxo,cayo];
+UhC [cvi,cvj];
+// Schwarz information
+fespace ShP(Ph,P1);
+ShP TractPx, TractPy;
+ShP DirPx,   DirPy;
+ShP TransPx, TransPy;
+ShP LambdaPx, LambdaPy;
+ShP TractNP;
+fespace ShC(Ch,P1);
+ShC TractCx, TractCy;
+ShC DirCx,   DirCy;
+ShC TransCx, TransCy;
+ShC LambdaCx, LambdaCy;
+ShC TractNC;
+// Contact information
+fespace ChP(Ph,P0);
+ChP ContP, PersP, pCFL = hTriangle;
+fespace ChC(Ch,P0);
+ChC ContC, PersC, cCFL = hTriangle;
