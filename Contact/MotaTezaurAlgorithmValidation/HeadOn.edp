@@ -1,0 +1,108 @@
+load "iovtk" 
+include "ContactFunctions.idp"
+string filenum;
+int[int] vtkorder = [1,1,1];
+
+bool NullAccel = 0;
+
+// Geometry
+real Lbar = 1.e-3; real Hbar = 1.e-4;
+int nL = 50; int nH = 5;
+
+border B1bot(t=-Lbar,0){x=t; y=-Hbar/2; label=1;}
+border B1right(t=-Hbar/2,Hbar/2){x=0; y=t; label=2;}
+border B1top(t=0,-Lbar){x=t; y=Hbar/2; label=3;}
+border B1left(t=Hbar/2,-Hbar/2){x=-Lbar; y=t; label=4;}
+mesh Bar1 = buildmesh(B1bot(nL)+B1right(nH)+B1top(nL)+B1left(nH));
+
+border B2bot(t=0,Lbar){x=t; y=-Hbar/2; label=1;}
+border B2right(t=-Hbar/2,Hbar/2){x=Lbar; y=t; label=4;}
+border B2top(t=Lbar,0){x=t; y=Hbar/2; label=3;}
+border B2left(t=Hbar/2,-Hbar/2){x=0; y=t; label=2;}
+mesh Bar2 = buildmesh(B2bot(nL)+B2right(nH)+B2top(nL)+B2left(nH));
+
+// Material
+real E = 1.0e9, nu = 0.25, rho = 1000.0;
+real lambda = E*nu/((1.+nu)*(1.-2.*nu));
+real mu = E/(2.*(1.+nu));
+func Elas = [[2*mu+lambda, lambda, 0.],[lambda, 2*mu+lambda, 0.],[0.,0.,mu]];
+
+// Macro
+macro eps(u) ([dx(u[0]),dy(u[1]),dx(u[1])+dy(u[0])]) // 
+macro M(a,p) (rho*(a[0]*p[0]+a[1]*p[1])) //
+macro K(a,p) (eps(a)'*Elas*eps(p)) //
+
+// Finite Element Spaces
+fespace Vh1(Bar1,[P2,P2]);
+fespace Vh2(Bar2,[P2,P2]);
+Vh1 [u1x,u1y], [v1x,v1y], [a1x,a1y], [d1x,d1y];
+Vh1 [aux1x,aux1y], [Cont1x,Cont1y], [Trac1x,Trac1y], [DirX,DirY];
+Vh2 [u2x,u2y], [v2x,v2y], [a2x,a2y], [d2x,d2y];
+Vh2 [aux2x,aux2y], [Cont2x,Cont2y], [Trac2x,Trac2y];
+
+// Initialize 
+int steps = 400;
+real t0 = -1e-6;
+real t = 3e-6;
+real dt = (t-t0)/steps;
+real v = 100.;
+real g = -t0*v;
+[u1x,u1y] = [-g,0]; [v1x,v1y] = [v,0];
+[u2x,u2y] = [g,0]; [v2x,v2y] = [-v,0];
+Bar1 = movemesh(Bar1,[x+u1x,y+u1y]); Bar2 = movemesh(Bar2,[x+u2x,y+u2y]);
+plot(Bar1,Bar2);
+
+// Newark Parameters
+real gamma = 0.5;
+real beta = 0.25*(0.5+gamma)^2;
+real C0 = c0(dt,beta,gamma);
+real C1 = c1(dt,beta,gamma);
+real C2 = c2(dt,beta,gamma);
+real C3 = c3(dt,beta,gamma);
+real C4 = c4(dt,beta,gamma);
+real C5 = c5(dt,beta,gamma);
+real C6 = c6(dt,beta,gamma);
+real C7 = c7(dt,beta,gamma);
+
+// Rayleigh Dissipation
+real AlphaM = 0.0;
+real AlphaK = 0.0;
+
+// Build matrices
+varf Bar1M([pxx,pyy],[pvi,pvj]) = int2d(Bar1)(M([pxx,pyy],[pvi,pvj]));
+varf Bar1K([pxx,pyy],[pvi,pvj]) = int2d(Bar1)(K([pxx,pyy],[pvi,pvj]));
+varf Bar2M([pxx,pyy],[pvi,pvj]) = int2d(Bar2)(M([pxx,pyy],[pvi,pvj]));
+varf Bar2K([pxx,pyy],[pvi,pvj]) = int2d(Bar2)(K([pxx,pyy],[pvi,pvj]));
+
+for (int nt=0; nt<steps; nt++){
+
+Bar1 = movemesh(Bar1,[x+d1x,y+d1y]);
+Bar2 = movemesh(Bar2,[x+d2x,y+d2y]);
+meshL Bar1 = extract(Bar1);
+meshL Bar2 = extract(Bar2);
+
+while(true){
+bool Contact = true;
+if(!Contact){
+matrix M1 = Bar1M(Vh1,Vh1);
+matrix K1 = Bar1K(Vh1,Vh1);
+matrix Ra1 = AlphaM*M1+AlphaK*K1;
+matrix KBar1 = C0*M1+C1*Ra1+K1;
+real[int] R1 = (C2*M1+C3*Ra1)*u1x[]; R1+= (C4*M1+C5*Ra1)*v1x[];
+d1x[] = KBar1^-1*R1;
+UpdateKinematics(d1x[],u1x[],v1x[],a1x[],C1,C6,C7,M1,C1,K1,0)
+
+matrix M2 = Bar2M(Vh2,Vh2);
+matrix K2 = Bar2K(Vh2,Vh2);
+matrix Ra2 = AlphaM*M2+AlphaK*K2;
+matrix KBar2 = C0*M2+C1*Ra2+K2;
+real[int] R2 = (C2*M2+C3*Ra2)*u1x[]; R1+= (C4*M1+C5*Ra1)*v1x[];
+d2x[] = KBar2^-1*R2;
+UpdateKinematics(d2x[],u2x[],v2x[],a2x[],C1,C6,C7,M2,C2,K2,0)
+}
+else{
+// Dir-Neu
+}
+}
+
+}

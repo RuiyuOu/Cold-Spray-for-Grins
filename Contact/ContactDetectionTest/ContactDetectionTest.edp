@@ -1,0 +1,62 @@
+load "msh3"
+
+real R  = 1.0;
+real Lp = 3.0;
+real Hp = 3.0;
+real OverlapTol = 1.e-6;
+real grav=1e4;
+
+border Pbottom(t=0,1){ x=-Lp/2+Lp*t;  y=-Hp;        label=1; }
+border Pright (t=0,1){ x= Lp/2;       y=-Hp+Hp*t;   label=2; }
+border Ptop   (t=0,1){ x= Lp/2-Lp*t;  y=0;          label=3; }
+border Pleft  (t=0,1){ x=-Lp/2;       y=-Hp*t;      label=4; }
+
+border Ball(t=0,2*pi){ x=R*cos(t); y=R+R*sin(t); label=5; }
+
+int nPlateSide = 30, nBall = 50;
+mesh Sh = buildmesh( Pbottom(nPlateSide) + Pright(nPlateSide/4)+ Ptop(nPlateSide)   + Pleft(nPlateSide/4));
+meshL ShL = extract(Sh);
+mesh Ch = buildmesh(Ball(nBall));
+
+mesh Combined = Sh+Ch;
+plot(Combined);
+
+fespace ChV(Ch,[P1,P1]);
+ChV [u1,u2]=[0,-0.1], [v1,v2], [ContU,ContV], [aux1,aux2],[color1,color2];
+
+real E = 210e3, nu = 0.3;
+real lambda = E*nu/((1+nu)*(1-2*nu));
+real mu     = E/(2*(1+nu));
+
+real sqrt2 = sqrt(2.0);
+macro div(v) (dx(v[0])+dy(v[1])) //
+macro eps(v) ([dx(v[0]),dy(v[1]),(dy(v[0])+dx(v[1]))/sqrt2]) //
+macro Sxx() (lambda*(dx(u1)+dy(u2)) + 2*mu*dx(u1)) //
+macro Syy() (lambda*(dx(u1)+dy(u2)) + 2*mu*dy(u2)) //
+macro Sxy() (mu*(dy(u1)+dx(u2))) //
+
+Ch = movemesh(Ch,[x+u1,y+u2]); Combined = Sh+Ch;
+[ContU,ContV] = [dist(Sh)<=OverlapTol, dist(Sh)<=OverlapTol];
+plot(ContU,Combined,wait=true,fill=true,value=true);
+
+varf ContactMask([u2,u1],[v1,v2]) = on(Ball,u1=1,u2=1);
+real[int] MT=ContactMask(0,ChV, tgv=1);
+aux1[]=MT;
+aux1[]=ContU[].*aux1[];
+plot(aux1,Combined,wait=true,fill=true,value=true);
+[u1,u2] = [projection(ShL).x-x,projection(ShL).y-y];
+real[int] g = aux1[].*u1[];
+varf  Lame([u,v],[uu,vv]) = int2d(Ch)(lambda*(div([u,v])*div([uu,vv]))+2.0*mu*( eps([u,v])'*eps([uu,vv])))+int2d(Ch)(-grav*vv);
+matrix A =Lame(ChV,ChV,sym=1,positive=1,solver="CHOLMOD");
+real[int] b0 = Lame(0,ChV);
+real[int] bBC = A*g;
+real[int] b = b0-bBC;
+setBC(A,aux1[],-2);
+b = aux1[] ? g : b;
+u1[] = A^-1*b;
+
+Ch = movemesh(Ch,[x+u1,y+u2]); Combined = Sh+Ch; [color1,color2]=[1,1];
+plot(color1,Combined,fill=true,wait=true);
+
+[ContU,ContV] = [dist(Sh)<=OverlapTol, dist(Sh)<=OverlapTol];
+plot(ContU,Combined,wait=true,fill=true,value=true);

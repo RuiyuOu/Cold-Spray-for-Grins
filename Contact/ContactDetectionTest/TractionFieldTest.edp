@@ -1,0 +1,43 @@
+mesh Th = square(40, 20, [2*x, y]);      // <-- use your own mesh
+
+real E = 210e3, nu = 0.3;
+real lambda = E*nu/((1+nu)*(1-2*nu));
+real mu     = E/(2*(1+nu));
+
+fespace Wh(Th, [P1, P1]);
+Wh [u1, u2], [v1, v2];
+
+solve Elasticity([u1, u2], [v1, v2]) =
+    int2d(Th)( lambda*(dx(u1)+dy(u2))*(dx(v1)+dy(v2))
+             + mu*(2*dx(u1)*dx(v1) + 2*dy(u2)*dy(v2)
+                   + (dy(u1)+dx(u2))*(dy(v1)+dx(v2))) )
+  - int1d(Th, 2)(1000.0*v1)
+  + on(1, u1=0, u2=0);
+
+// stress components
+macro Sxx() (lambda*(dx(u1)+dy(u2)) + 2*mu*dx(u1)) //
+macro Syy() (lambda*(dx(u1)+dy(u2)) + 2*mu*dy(u2)) //
+macro Sxy() (mu*(dy(u1)+dx(u2))) //
+
+// traction field, defined on the WHOLE mesh
+fespace Vh(Th, P1);
+Vh tx = 0, ty = 0;
+
+varf vMeas (unused, w) = int1d(Th)(w);
+varf vLoadX(unused, w) = int1d(Th)((Sxx*N.x + Sxy*N.y)*w);
+varf vLoadY(unused, w) = int1d(Th)((Sxy*N.x + Syy*N.y)*w);
+
+real[int] meas = vMeas (0, Vh);
+real[int] bx   = vLoadX(0, Vh);
+real[int] by   = vLoadY(0, Vh);
+
+for (int i = 0; i < Vh.ndof; i++)
+  if (abs(meas[i]) > 1e-12) {
+    tx[][i] = bx[i]/meas[i];
+    ty[][i] = by[i]/meas[i];
+  }
+
+plot([tx, ty], value=true, wait=true, cmm="traction (0 inside, meaningful on dTh)");
+real[int] point = [2,0.5];
+cout<< tx(point[0],point[1]) << endl;
+cout<< ty(point[0],point[1]) << endl;
