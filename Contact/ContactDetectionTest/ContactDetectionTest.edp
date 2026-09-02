@@ -22,7 +22,7 @@ mesh Combined = Sh+Ch;
 plot(Combined);
 
 fespace ChV(Ch,[P1,P1]);
-ChV [u1,u2]=[0,-0.1], [v1,v2], [ContU,ContV], [aux1,aux2],[color1,color2];
+ChV [u1,u2]=[0,-0.1], [v1,v2], [ContU,ContV], [aux1,aux2],[color1,color2],[tx,ty],[Nx,Ny]=[0,0];
 
 real E = 210e3, nu = 0.3;
 real lambda = E*nu/((1+nu)*(1-2*nu));
@@ -60,3 +60,26 @@ plot(color1,Combined,fill=true,wait=true);
 
 [ContU,ContV] = [dist(Sh)<=OverlapTol, dist(Sh)<=OverlapTol];
 plot(ContU,Combined,wait=true,fill=true,value=true);
+
+//for(int k=0; k <= Ch.nbe; k++)
+[Nx,Ny]=[Ch.be(0).N.x,Ch.be(0).N.y];
+plot([Nx, Ny], value=true, wait=true);
+
+[tx,ty]=[Sxx*Nx+Sxy*Ny,Sxy*Nx+Syy*Ny];
+//varf vMeas (unused, w) = int1d(Ch)(w);
+//varf vLoadX(unused, w) = int1d(Ch)((Sxx*N.x + Sxy*N.y)*w);
+//varf vLoadY(unused, w) = int1d(Ch)((Sxy*N.x + Syy*N.y)*w);
+
+//real[int] meas = vMeas (0, ChV);
+//real[int] bx   = vLoadX(0, ChV);
+//real[int] by   = vLoadY(0, ChV);
+
+//for (int i = 0; i < ChV.ndof; i++)
+//  if (abs(meas[i]) > 1e-12) {
+//    tx[][i] = bx[i]/meas[i];
+//    ty[][i] = by[i]/meas[i];
+//  }
+
+plot([tx, ty], value=true, wait=true);
+cout << tx(0.75,0) <<endl;
+cout << ty(0.75,0) <<endl;
