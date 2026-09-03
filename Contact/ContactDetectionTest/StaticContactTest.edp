@@ -1,7 +1,8 @@
 load "iovtk"
+load "msh3"
 
 // Schwarz DDM Parameters
-int SchwarzIterLim = 10;
+int SchwarzIterLim = 20;
 real SchwarzAbsTol = 1e-12;
 real SchwarzRelTol = 1e-9;
 
@@ -10,15 +11,15 @@ real OverlapTol = 1e-9;
 real CompressionTol = 0;
 
 // Physics Parameters
-real ModulusMagnitudeReduction = 0;
-real g = -9.8;
+real ModulusMagnitudeReduction = 3;
+real g = -9.8e0;
 
 // Small cylinder parameters
 real SmallR = 1.e-2;
 border SmallCirc(t=0,2*pi){ x=SmallR*cos(t); y=SmallR+SmallR*sin(t); label=1; }
 mesh Small = buildmesh(SmallCirc(30));
-Small = splitmesh(Small, 1 + 3*exp(-(y/0.003)^2));
-real SmallE = 5.e6*(10^(-ModulusMagnitudeReduction));
+Small = splitmesh(Small, 1 + 3*exp(-(y/0.005)^2));
+real SmallE = 1.e6*(10^(-ModulusMagnitudeReduction));
 real SmallNu = 0.49;
 real SmallRho = 9.5e2;
 real SmallForce = SmallRho*g;
@@ -26,22 +27,26 @@ fespace Sh(Small,[P1,P1]);
 Sh [sdx,sdy], [sx,sy], [si,sj];
 Sh [sContX,sContY], [sOldContX,sOldContY], [sMaskX,sMaskY], [sTractX,sTractY];
 fespace ShS(Small, P1);
-ShS sSxx, sSxy, sSyy, sN;
-
+ShS sSxx, sSxy, sSyy, sSzz, sVonMises, sN;
+real NetSmallForce = int2d(Small)(SmallForce);
 // Large cylinder parameters
 real LargeR = 2.e-2;
-border LargeCirc(t=0,2*pi){ x=LargeR*cos(t); y=-LargeR+LargeR*sin(t); label=2; }
-mesh Large = buildmesh(LargeCirc(50));
+border LargeCirc(t=0,1){ x=LargeR/2-LargeR*t; y=0; label=2; }
+border Left(t=0,1){x=-LargeR/2; y=-LargeR*t; label=3;};
+border Right(t=0,1){x=LargeR/2; y=-LargeR+LargeR*t; label=4;};
+border Bottom(t=0,1){x=-LargeR/2+LargeR*t; y=-LargeR; label=5;};
+mesh Large = buildmesh(LargeCirc(20)+Left(10)+Right(10)+Bottom(10));
 Large = splitmesh(Large, 1 + 3*exp(-(y/0.003)^2));
-real LargeE = 1.e6*(10^(-ModulusMagnitudeReduction));
+real LargeE = 8.e6*(10^(-ModulusMagnitudeReduction));
 real LargeNu = 0.49;
 real LargeRho = 1.05e3;
-real LargeForce = -LargeRho*g;
+real AreaLarge = int2d(Large)(1.0);
+real LargeForce = -NetSmallForce/AreaLarge;
 fespace Lh(Large,[P1,P1]);
 Lh [ldx,ldy], [lx,ly], [li,lj];
 Lh [lContX,lContY], [lOldContX,lOldContY], [lMaskX,lMaskY], [lTractX,lTractY];
 fespace LhS(Large, P1);
-LhS lSxx, lSxy, lSyy, lN; 
+LhS lSxx, lSxy, lSyy, lSzz, lVonMises, lN; 
 
 // macros
 real sqrt2 = sqrt(2.0);
@@ -50,35 +55,110 @@ macro eps(v) ([dx(v[0]),dy(v[1]),(dy(v[0])+dx(v[1]))/sqrt2]) //
 macro Sxx(E,nu,u) (lambda(E,nu)*(dx(u[0])+dy(u[1])) + 2*mu(E,nu)*dx(u[0])) //
 macro Syy(E,nu,u) (lambda(E,nu)*(dx(u[0])+dy(u[1])) + 2*mu(E,nu)*dy(u[1])) //
 macro Sxy(E,nu,u) (mu(E,nu)*(dy(u[0])+dx(u[1]))) //
-macro BuildMaskTensor(Mesh,FESpace, MaskTensor, ContactTensor){
+macro Szz(E,nu,u) (lambda(E,nu)*(dx(u[0])+dy(u[1]))) //
+macro BuildMaskTensor(Mesh,FESpace, MaskTensor, ContactTensor, ifNeu){
 varf LocalContactMask([u2,u1],[v1,v2]) = on(Mesh,u1=1,u2=1);
-real[int] LocalEdgeIndicator=ContactMask(0,FESpace, tgv=1);
+real[int] LocalEdgeIndicator=LocalContactMask(0,FESpace, tgv=1);
 MaskTensor[] = LocalEdgeIndicator;
-MaskTensor[] = ContactTensor[].*aux1[];
+if(!ifNeu){MaskTensor[] = ContactTensor[].*MaskTensor[];}
 } //
-macro SolveDirichlet(Mesh, FESpace, OtherBound, MatName, DisplacementIncrementField, MaskTensor, E, nu, force)) {
-DisplacementIncrementField = [projection(OtherBound).x-x,projection(OtherBound).y-y];
+macro SolveDirichlet(Mesh, FESpace, OtherBound, DisplacementField, VecDisplacement, DisplacementIncrementField, MaskTensor, E, nu, force) {
+VecDisplacement = [projection(OtherBound).x-x,projection(OtherBound).y-y];
 real LocalLambda = lambda(E,nu);
 real LocalMu     = mu(E,nu);
 varf LocalLame([u,v],[uu,vv]) =
     int2d(Mesh)( LocalLambda*(div([u,v])*div([uu,vv])) + 2.0*LocalMu*(eps([u,v])'*eps([uu,vv])) )
   + int2d(Mesh)( force*vv );
 matrix LocalA = LocalLame(FESpace,FESpace,sym=1,positive=1,solver="CHOLMOD");
+real[int] LocalStressHistory = LocalA*DisplacementField[];
 real[int] Localb0 = LocalLame(0,FESpace);
+Localb0 = Localb0 - LocalStressHistory;
 real[int] Localg = MaskTensor[].*DisplacementIncrementField[];
 real[int] LocalbBS = LocalA*Localg;
-real[int] Localb = b = Localbo - LocalbBS;
-Localb = MaskTensor[] ? Localg : b;
+real[int] Localb = Localb0 - LocalbBS;
+Localb = MaskTensor[] ? Localg : Localb;
 setBC(LocalA,MaskTensor[],-2);
-DisplacementIncrementField = LocalA^-1*Localb
+DisplacementIncrementField[] = LocalA^-1*Localb;
 } //
-macro SolveNeumann() () //
-macro UpdateContact() () //
+macro SolveNeumann(Mesh, FESpace, Bound, OtherBound, DisplacementField, DisplacementIncrementField, TractionField, OtherTractionField, ContactTensor, MaskTensor, E, nu, force){
+TractionField = [OtherTractionField[0](projection(OtherBound).x,projection(OtherBound).y),OtherTractionField[1](projection(OtherBound).x,projection(OtherBound).y)];
+TractionField = -1*TractionField;
+real LocalLambda = lambda(E,nu);
+real LocalMu     = mu(E,nu);
+varf LocalLame([u,v],[uu,vv]) =
+    int2d(Mesh)( LocalLambda*(div([u,v])*div([uu,vv])) + 2.0*LocalMu*(eps([u,v])'*eps([uu,vv])) )
+  + int1d(Mesh, Bound)( (ContactTensor.*TractionField)'*[uu,vv]);
+matrix LocalA = LocalLame(FESpace,FESpace,solver="CG");
+real[int] LocalStressHistory = LocalA*DisplacementField[];
+real[int] Localb0 = LocalLame(0,FESpace);
+Localb0 = Localb0 - LocalStressHistory;
+real[int] Localg = MaskTensor[].*DisplacementIncrementField[];
+real[int] LocalbBS = LocalA*Localg;
+real[int] Localb = Localb0 - LocalbBS;
+Localb = MaskTensor[] ? Localg : Localb;
+setBC(LocalA,MaskTensor[],-2);
+DisplacementIncrementField[] = LocalA^-1*Localb;
+} //
+macro UpdateContact(Mesh, OtherMesh, ContactTensor, OldContactTensor, Sigma, TractionField, NormalTraction){
+fespace Temp(Mesh,P1); Temp Distance = (dist(OtherMesh)<=OverlapTol);
+for (int k = 0; k < Mesh.nbe; k++){
+  real nx = Mesh.be(k).N.x, ny = Mesh.be(k).N.y;
+  for (int i = 0; i < 2; i++){
+    int iv = int(Mesh.be(k)[i]);
+    real sxx = Sigma[0][][iv], sxy = Sigma[2][][iv], syy = Sigma[1][][iv];
+	ContactTensor[][2*iv]   = Distance[][iv];
+    ContactTensor[][2*iv+1] = Distance[][iv];
+    TractionField[][2*iv]   = (sxx*nx + sxy*ny);
+    TractionField[][2*iv+1] = (sxy*nx + syy*ny);
+	NormalTraction[][iv] = TractionField[][2*iv]*nx+TractionField[][2*iv+1]*ny;
+	real wasOld = OldContactTensor[][2*iv];
+    real newMask = (wasOld > 0.5) ? (NormalTraction[][iv] < 0. ? 1. : 0.) : ContactTensor[][2*iv];
+    ContactTensor[][2*iv]   = newMask;
+    ContactTensor[][2*iv+1] = newMask;
+  }
+}} //
+macro UpdateStress(Sigma, Displacement, E, nu){
+Sigma[0] = Sxx(E,nu,Displacement);
+Sigma[1] = Syy(E,nu,Displacement);
+Sigma[2] = Sxy(E,nu,Displacement);
+Sigma[3] = Szz(E,nu,Displacement);
+} //
 
 // functions
 func real lambda(real E, real nu){return E*nu/((1+nu)*(1-2*nu));}
 func real mu(real E, real nu){return E/(2*(1+nu));}
 
+Small = movemesh(Small,[x,y-5.e-4]);
+[sdx,sdy]=[sdx,sdy]; [sx,sy]=[sx,sy]; [si,sj]=[si,sj]; [sContX,sContY]=[sContX,sContY]; [sOldContX,sOldContY]=[sContX,sContY]; [sMaskX,sMaskY]=[sMaskX,sMaskY]; [sTractX,sTractY]=[sTractX,sTractY];
+sSxx=sSxx; sSxy=sSxy; sSyy=sSyy; sSzz=sSzz; sVonMises = sqrt( 0.5*((sSxx-sSyy)^2 + (sSyy-sSzz)^2 + (sSzz-sSxx)^2) + 3.0*sSxy^2 ); sN=sN;
+
 for( int iter = 0; iter < SchwarzIterLim; iter++){
-// Build
+meshL SmallBound = extract(Small);
+meshL LargeBound = extract(Large);
+UpdateContact(Small, Large, sContX, sOldContX, [sSxx,sSyy,sSxy], sTractX, sN)
+UpdateContact(Large, Small, lContX, lOldContX, [lSxx,lSyy,lSxy], lTractX, lN)
+BuildMaskTensor(SmallCirc,Sh,sMaskX,sContX,false)
+BuildMaskTensor(Bottom,Lh,lMaskX,lContX,true)
+SolveDirichlet(Small,Sh,LargeBound,sx,[sdx,sdy],sdx,sMaskX,SmallE,SmallNu,SmallForce)
+[sx,sy] = [sx,sy] + [sdx,sdy];
+UpdateStress([sSxx,sSyy,sSxy,sSzz],[sx,sy],SmallE,SmallNu);
+SolveNeumann(Large,Lh,LargeCirc, SmallBound,lx,ldx,[lTractX,lTractY],[sTractX,sTractY],[lContX,lContY],lMaskX,LargeE,LargeNu,LargeForce)
+[lx,ly] = [lx,ly] + [ldx,ldy];
+UpdateStress([lSxx,lSyy,lSxy,lSzz],[lx,ly],LargeE,LargeNu);
+cout << max(sdx[].max,sdy[].max) << endl;
+cout << max(ldx[].max,ldy[].max) << endl;
+Small = movemesh(Small,[x+sdx,y+sdy]);
+Large = movemesh(Large,[x+ldx,y+ldy]);
+[sdx,sdy]=[sdx,sdy]; [sx,sy]=[sx,sy]; [si,sj]=[si,sj]; [sContX,sContY]=[sContX,sContY]; [sOldContX,sOldContY]=[sContX,sContY]; [sMaskX,sMaskY]=[sMaskX,sMaskY]; [sTractX,sTractY]=[sTractX,sTractY];
+sSxx=sSxx; sSxy=sSxy; sSyy=sSyy; sSzz=sSzz; sVonMises = sqrt( 0.5*((sSxx-sSyy)^2 + (sSyy-sSzz)^2 + (sSzz-sSxx)^2) + 3.0*sSxy^2 ); sN=sN;
+[ldx,ldy]=[ldx,ldy]; [lx,ly]=[lx,ly]; [li,lj]=[li,lj]; [lContX,lContY]=[lContX,lContY]; [lOldContX,lOldContY]=[lContX,lContY]; [lMaskX,lMaskY]=[lMaskX,lMaskY]; [lTractX,lTractY]=[lTractX,lTractY];
+lSxx=lSxx; lSxy=lSxy; lSyy=lSyy; lSzz=lSzz; lVonMises = sqrt( 0.5*((lSxx-lSyy)^2 + (lSyy-lSzz)^2 + (lSzz-lSxx)^2) + 3.0*lSxy^2 ); lN=lN;
+string filename;
+if(iter < 10) filename = "Meshes0"+iter;
+else filename = "Meshes"+iter;
+filename = filename+".svg";
+plot(sVonMises,lVonMises,Small,Large,fill=true,value=true,svg=filename);
+
+if (max(sdx[].max,ldx[].max) < SchwarzAbsTol || ((max(sdx[].max,ldx[].max) / max(min(sx[].min,lx[].min),1e-21)) < SchwarzRelTol)){break;}
+
 }
