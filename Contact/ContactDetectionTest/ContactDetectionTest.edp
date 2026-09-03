@@ -17,12 +17,13 @@ int nPlateSide = 30, nBall = 50;
 mesh Sh = buildmesh( Pbottom(nPlateSide) + Pright(nPlateSide/4)+ Ptop(nPlateSide)   + Pleft(nPlateSide/4));
 meshL ShL = extract(Sh);
 mesh Ch = buildmesh(Ball(nBall));
-
+// split the mesh into finer triangles near the contact surface if wanted
+// Ch = splitmesh(Ch, 1 + 3*exp(-(y/0.4)^2));
 mesh Combined = Sh+Ch;
 plot(Combined);
 
 fespace ChV(Ch,[P1,P1]);
-ChV [u1,u2]=[0,-0.1], [v1,v2], [ContU,ContV], [aux1,aux2],[color1,color2],[tx,ty],[Nx,Ny]=[0,0];
+ChV [u1,u2]=[0,-0.1], [v1,v2], [ContU,ContV], [aux1,aux2],[color1,color2],[tx,ty]=[0,0],[Nx,Ny]=[0,0];
 
 real E = 210e3, nu = 0.3;
 real lambda = E*nu/((1+nu)*(1-2*nu));
@@ -60,26 +61,37 @@ plot(color1,Combined,fill=true,wait=true);
 
 [ContU,ContV] = [dist(Sh)<=OverlapTol, dist(Sh)<=OverlapTol];
 plot(ContU,Combined,wait=true,fill=true,value=true);
+[tx,ty]=[tx,ty];
+fespace ChS(Ch,P1);
+ChS SxxF=Sxx, SxyF=Sxy, SyyF=Syy;
 
-//for(int k=0; k <= Ch.nbe; k++)
-[Nx,Ny]=[Ch.be(0).N.x,Ch.be(0).N.y];
-plot([Nx, Ny], value=true, wait=true);
+for (int k = 0; k < Ch.nbe; k++){
+  real nx = Ch.be(k).N.x, ny = Ch.be(k).N.y;
+  for (int i = 0; i < 2; i++){
+    int iv = int(Ch.be(k)[i]);
+    real sxx = SxxF[][iv], sxy = SxyF[][iv], syy = SyyF[][iv];
+    tx[][2*iv]   = (sxx*nx + sxy*ny);
+    tx[][2*iv+1] = (sxy*nx + syy*ny);
+  }
+}
 
-[tx,ty]=[Sxx*Nx+Sxy*Ny,Sxy*Nx+Syy*Ny];
-//varf vMeas (unused, w) = int1d(Ch)(w);
-//varf vLoadX(unused, w) = int1d(Ch)((Sxx*N.x + Sxy*N.y)*w);
-//varf vLoadY(unused, w) = int1d(Ch)((Sxy*N.x + Syy*N.y)*w);
+plot([tx, ty],Combined, value=true, wait=true);
+cout << "Traction at (0,0): ( " << tx(0.,0.) << " , " << ty(0.,0.) << " )"<<endl;
 
-//real[int] meas = vMeas (0, ChV);
-//real[int] bx   = vLoadX(0, ChV);
-//real[int] by   = vLoadY(0, ChV);
+[Nx,Ny]=[Nx,Ny];
+for (int k = 0; k < Ch.nbe; k++){
+  real nx = Ch.be(k).N.x, ny = Ch.be(k).N.y;
+  for (int i = 0; i < 2; i++){
+    int iv = int(Ch.be(k)[i]);
+    Nx[][2*iv]   = (tx[][2*iv]*nx + tx[][2*iv+1]*ny);
+    Nx[][2*iv+1] = (tx[][2*iv]*nx + tx[][2*iv+1]*ny);
+  }
+}
 
-//for (int i = 0; i < ChV.ndof; i++)
-//  if (abs(meas[i]) > 1e-12) {
-//    tx[][i] = bx[i]/meas[i];
-//    ty[][i] = by[i]/meas[i];
-//  }
+plot(Nx,Combined, value=true, wait=true, fill=true);
 
-plot([tx, ty], value=true, wait=true);
-cout << tx(0.75,0) <<endl;
-cout << ty(0.75,0) <<endl;
+[ContU,ContV] = [dist(Sh)<=OverlapTol, dist(Sh)<=OverlapTol];
+plot(ContU,Combined,wait=true,fill=true,value=true);
+
+[ContU,ContV] = [ContU*(Nx<0),ContV*(Ny<0)];
+plot(ContU,Combined,wait=true,fill=true,value=true);
