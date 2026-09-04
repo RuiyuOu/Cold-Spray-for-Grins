@@ -34,7 +34,7 @@ int[int] vtkorder = [1,1];
 int[int] vtkorder2 = [1,1,1];
 
 // Beta Newark parameters
-real gamma 	= 0.9;
+real gamma 	= 0.5;
 real beta 	= 0.25*(0.5+gamma)^2;
 
 // Newark constants
@@ -49,86 +49,13 @@ real C5 = c5(dt,beta,gamma);
 real AlphaM 	= 0.00;
 real AlphaK 	= 0.00;
 
-// Matrices 
-varf MPlate([ux,uy],[vx,vy]) = int2d(Ph)(M([ux,uy],[vx,vy]));
-varf MParticle([ux,uy],[vx,vy]) = int2d(Ch)(M([ux,uy],[vx,vy]));
-varf KPlate([ux,uy],[vx,vy]) = int2d(Ph)(K([ux,uy],[vx,vy]));
-varf KParticle([ux,uy],[vx,vy]) = int2d(Ch)(K([ux,uy],[vx,vy]));
-
-
-
-// Macros
-macro BuildMaskTensor(Mesh,FESpace, MaskTensor, ContactTensor){
-varf LocalContactMask([u2,u1],[v1,v2]) = on(Mesh,u1=1,u2=1);
-real[int] LocalEdgeIndicator=LocalContactMask(0,FESpace, tgv=1);
-MaskTensor[] = LocalEdgeIndicator;
-MaskTensor[] = ContactTensor[].*MaskTensor[];
-} //
-macro SolveDirichlet(Mesh, FESpace, OtherBound, DisplacementField, VecDisplacement, DisplacementIncrementField, MaskTensor, E, nu, force) {
-VecDisplacement = [projection(OtherBound).x-x,projection(OtherBound).y-y];
-real LocalLambda = lambda(E,nu);
-real LocalMu     = mu(E,nu);
-varf LocalLame([u,v],[uu,vv]) =
-    int2d(Mesh)( LocalLambda*(div([u,v])*div([uu,vv])) + 2.0*LocalMu*(eps([u,v])'*eps([uu,vv])) )
-  + int2d(Mesh)( force*vv );
-matrix LocalA = LocalLame(FESpace,FESpace,sym=1,positive=1,solver="CHOLMOD");
-real[int] LocalStressHistory = LocalA*DisplacementField[];
-real[int] Localb0 = LocalLame(0,FESpace);
-Localb0 = Localb0 - LocalStressHistory;
-real[int] Localg = MaskTensor[].*DisplacementIncrementField[];
-real[int] LocalbBS = LocalA*Localg;
-real[int] Localb = Localb0 - LocalbBS;
-Localb = MaskTensor[] ? Localg : Localb;
-setBC(LocalA,MaskTensor[],-2);
-DisplacementIncrementField[] = LocalA^-1*Localb;
-} //
-macro SolveNeumann(Mesh, FESpace, Bound, OtherBound, DisplacementField, DisplacementIncrementField, TractionField, OtherTractionField, MaskTensor, DirBound, E, nu, force){
-TractionField = [OtherTractionField[0](projection(OtherBound).x,projection(OtherBound).y),OtherTractionField[1](projection(OtherBound).x,projection(OtherBound).y)];
-TractionField = -1*TractionField;
-real LocalLambda = lambda(E,nu);
-real LocalMu     = mu(E,nu);
-real[int] force = int1d(Mesh, Bound)(MaskTensor.*TractionField);
-real Area  = int2d(Mesh)(1.0);
-force = force/Area
-varf LocalLame([u,v],[uu,vv]) =
-    int2d(Mesh)( LocalLambda*(div([u,v])*div([uu,vv])) + 2.0*LocalMu*(eps([u,v])'*eps([uu,vv])) )
-  + int2d(Mesh)( force'*[uu,vv] )
-  + int1d(Mesh, Bound)( (MaskTensor.*TractionField)'*[uu,vv]);
-matrix LocalA = LocalLame(FESpace,FESpace,solver="UMFPACK");
-real[int] LocalStressHistory = LocalA*DisplacementField[];
-real[int] Localb0 = LocalLame(0,FESpace);
-Localb0 = Localb0 - LocalStressHistory;
-real[int] Localb = Localb0;
-DisplacementIncrementField[] = LocalA^-1*Localb;
-} //
-macro UpdateContact(Mesh, OtherMesh, ContactTensor, OldContactTensor, Sigma, TractionField, NormalTraction){
-fespace Temp(Mesh,P1); Temp Distance = (dist(OtherMesh)<=OverlapTol);
-for (int k = 0; k < Mesh.nbe; k++){
-  real nx = Mesh.be(k).N.x, ny = Mesh.be(k).N.y;
-  for (int i = 0; i < 2; i++){
-    int iv = int(Mesh.be(k)[i]);
-    real sxx = Sigma[0][][iv], sxy = Sigma[2][][iv], syy = Sigma[1][][iv];
-	ContactTensor[][2*iv]   = Distance[][iv];
-    ContactTensor[][2*iv+1] = Distance[][iv];
-    TractionField[][2*iv]   = (sxx*nx + sxy*ny);
-    TractionField[][2*iv+1] = (sxy*nx + syy*ny);
-	NormalTraction[][iv] = TractionField[][2*iv]*nx+TractionField[][2*iv+1]*ny;
-	real wasOld = OldContactTensor[][2*iv];
-    real newMask = (wasOld > 0.5) ? (NormalTraction[][iv] < 0. ? 1. : 0.) : ContactTensor[][2*iv];
-    ContactTensor[][2*iv]   = newMask;
-    ContactTensor[][2*iv+1] = newMask;
-  }
-}} //
-
 for (int nt = 0; nt < steps; nt++){
 
 	// initialize for ALE
 	
 	// Solve physics
 
-	// Save data and move mesh
-
-	
+	// Update Kinematics
 
 	//Save data
 	if (nt%5==0){

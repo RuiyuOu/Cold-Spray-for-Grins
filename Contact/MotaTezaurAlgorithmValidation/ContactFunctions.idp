@@ -8,25 +8,73 @@ func real c5(real dt, real beta, real gamma){return dt*(gamma/(2.*beta)-1.);}
 func real c6(real dt, real beta, real gamma){return 1.-gamma/beta;}
 func real c7(real dt, real beta, real gamma){return -1.*c5(dt,beta,gamma);}
 
-func bool ActiveContact(real[int] Contact){return Contact.max >= 1;}
-
-macro UpdateKinematics(dx,x,v,a,C1,C6,C7,M,C,K,Ext)
-{
-x[] += dx[];
-v[] *= C6; v[] += C1*dx[]; v[] += C7*a[];
-real[int] Residue = (-1.*C)*v1x; Residue[] += Ext; Residue[] -= K*u1x;
-a[] = M^-1*Residue;
-} // 
-
-macro UpdateContact(Contact,Mesh,OtherMesh,Traction) () // 
-
-macro DirichletTranser(ThisMesh, OtherMeshBorder, OtherMeshVel, OtherMeshAcc)
-{
+real sqrt2 = sqrt(2.0);
+macro div(v) (dx(v[0])+dy(v[1])) //
+macro eps(v) ([dx(v[0]),dy(v[1]),(dy(v[0])+dx(v[1]))/sqrt2]) //
+macro Sxx(E,nu,u) (lambda(E,nu)*(dx(u[0])+dy(u[1])) + 2*mu(E,nu)*dx(u[0])) //
+macro Syy(E,nu,u) (lambda(E,nu)*(dx(u[0])+dy(u[1])) + 2*mu(E,nu)*dy(u[1])) //
+macro Sxy(E,nu,u) (mu(E,nu)*(dy(u[0])+dx(u[1]))) //
+macro Szz(E,nu,u) (lambda(E,nu)*(dx(u[0])+dy(u[1]))) //
+macro BuildMaskTensor(Mesh,FESpace, MaskTensor, ContactTensor, ifNeu){
+varf LocalContactMask([u2,u1],[v1,v2]) = on(Mesh,u1=1,u2=1);
+real[int] LocalEdgeIndicator=LocalContactMask(0,FESpace, tgv=1);
+MaskTensor[] = LocalEdgeIndicator;
+if(!ifNeu){MaskTensor[] = ContactTensor[].*MaskTensor[];}
+} //
+macro SolveDirichlet(Mesh, FESpace, OtherBound, DisplacementField, VecDisplacement, DisplacementIncrementField, MaskTensor, E, nu, force) {
+VecDisplacement = [projection(OtherBound).x-x,projection(OtherBound).y-y];
+real LocalLambda = lambda(E,nu);
+real LocalMu     = mu(E,nu);
+varf LocalLame([u,v],[uu,vv]) =
+    int2d(Mesh)( LocalLambda*(div([u,v])*div([uu,vv])) + 2.0*LocalMu*(eps([u,v])'*eps([uu,vv])) )
+  + int2d(Mesh)( force*vv );
+matrix LocalA = LocalLame(FESpace,FESpace,sym=1,positive=1,solver="CHOLMOD");
+real[int] LocalStressHistory = LocalA*DisplacementField[];
+real[int] Localb0 = LocalLame(0,FESpace);
+Localb0 = Localb0 - LocalStressHistory;
+real[int] Localg = MaskTensor[].*DisplacementIncrementField[];
+real[int] LocalbBS = LocalA*Localg;
+real[int] Localb = Localb0 - LocalbBS;
+Localb = MaskTensor[] ? Localg : Localb;
+setBC(LocalA,MaskTensor[],-2);
+DisplacementIncrementField[] = LocalA^-1*Localb;
+} //
+macro SolveNeumann(Mesh, FESpace, Bound, OtherBound, DisplacementField, DisplacementIncrementField, TractionField, OtherTractionField, ContactTensor, MaskTensor, E, nu, force){
+TractionField = [OtherTractionField[0](projection(OtherBound).x,projection(OtherBound).y),OtherTractionField[1](projection(OtherBound).x,projection(OtherBound).y)];
+TractionField = -1*TractionField;
+real LocalLambda = lambda(E,nu);
+real LocalMu     = mu(E,nu);
+varf LocalLame([u,v],[uu,vv]) =
+    int2d(Mesh)( LocalLambda*(div([u,v])*div([uu,vv])) + 2.0*LocalMu*(eps([u,v])'*eps([uu,vv])) )
+  + int1d(Mesh, Bound)( (ContactTensor.*TractionField)'*[uu,vv]);
+matrix LocalA = LocalLame(FESpace,FESpace,solver="CG");
+real[int] LocalStressHistory = LocalA*DisplacementField[];
+real[int] Localb0 = LocalLame(0,FESpace);
+Localb0 = Localb0 - LocalStressHistory;
+real[int] Localg = MaskTensor[].*DisplacementIncrementField[];
+real[int] LocalbBS = LocalA*Localg;
+real[int] Localb = Localb0 - LocalbBS;
+Localb = MaskTensor[] ? Localg : Localb;
+setBC(LocalA,MaskTensor[],-2);
+DisplacementIncrementField[] = LocalA^-1*Localb;
+} //
+macro UpdateContact(Mesh, OtherMesh, ContactTensor, OldContactTensor, Sigma, TractionField, NormalTraction){
+fespace Temp(Mesh,P1); Temp Distance = (dist(OtherMesh)<=OverlapTol);
+for (int k = 0; k < Mesh.nbe; k++){
+  real nx = Mesh.be(k).N.x, ny = Mesh.be(k).N.y;
+  for (int i = 0; i < 2; i++){
+    int iv = int(Mesh.be(k)[i]);
+    real sxx = Sigma[0][][iv], sxy = Sigma[2][][iv], syy = Sigma[1][][iv];
+	ContactTensor[][2*iv]   = Distance[][iv];
+    ContactTensor[][2*iv+1] = Distance[][iv];
+    TractionField[][2*iv]   = (sxx*nx + sxy*ny);
+    TractionField[][2*iv+1] = (sxy*nx + syy*ny);
+	NormalTraction[][iv] = TractionField[][2*iv]*nx+TractionField[][2*iv+1]*ny;
+	real wasOld = OldContactTensor[][2*iv];
+    real newMask = (wasOld > 0.5) ? (NormalTraction[][iv] < 0. ? 1. : 0.) : ContactTensor[][2*iv];
+    ContactTensor[][2*iv]   = newMask;
+    ContactTensor[][2*iv+1] = newMask;
+  }
+}
 
 } //
-
-macro DirichletSolve() {} //
-
-macro NeumannTransfer() {} //
-
-macro NeumannSolve() {} //
