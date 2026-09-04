@@ -13,7 +13,7 @@ real OverlapTol = 1e-9;
 real CompressionTol = 0;
 
 // Physics Parameters
-real ModulusMagnitudeReduction = 2;
+real ModulusMagnitudeReduction = 0;
 real g = -9.8e0;
 
 // Small cylinder parameters
@@ -168,4 +168,5 @@ else filename = "Data"+iter;
 savevtk(filename+".vtu", Combined, VonMises, ContactPoints, dataname="VonMises ContactPoints", order=vtkorder);
 if (max(max(sdx[].linfty, sdy[].linfty),max(ldx[].linfty, ldy[].linfty) || ((max(max(sdx[].linfty, sdy[].linfty),max(ldx[].linfty, ldy[].linfty)) / max(max(max(sdx[].linfty, sdy[].linfty),max(ldx[].linfty, ldy[].linfty)),1e-21)))< SchwarzRelTol ) < SchwarzAbsTol ){cout << "Iterations needed: " << iter <<endl; break;}
 }
-// 
+cout << "contact length possibly" << int1d(Small,SmallCirc)(sContX) << endl;
+cout << "traction integrated" << int1d(Small,SmallCirc)(sTractY*sContX) << endl;
