@@ -6,7 +6,7 @@ int[int] vtkorder = [1,1];
 int SchwarzIterLim = 100;
 real SchwarzAbsTol = 1e-12;
 real SchwarzRelTol = 1e-9;
-real SchwarzRelaxation = 0.7;
+real SchwarzRelaxation = 1;
 
 // Contact Algo Parameters
 real OverlapTol = 1e-9;
@@ -18,36 +18,36 @@ real g = -9.8e0;
 
 // Small cylinder parameters
 real SmallR = 1.e-2;
-border SmallCirc(t=0,2*pi){ x=SmallR*cos(t); y=SmallR+SmallR*sin(t); label=1; }
+border SmallCirc(t=0,2*pi){ x=SmallR*cos(t); y=SmallR+SmallR*sin(t); label=1; };
 mesh Small = buildmesh(SmallCirc(30));
 Small = splitmesh(Small, 1 + 3*exp(-(y/0.003)^2));
 real SmallE = 1.e6*(10^(-ModulusMagnitudeReduction));
 real SmallNu = 0.49;
 real SmallRho = 19.5e2;
 real SmallForce = SmallRho*g;
-fespace Sh(Small,[P1,P1]);
+fespace Sh(Small,[P2,P2]);
 Sh [sdx,sdy], [sx,sy], [si,sj];
 Sh [sContX,sContY], [sOldContX,sOldContY], [sMaskX,sMaskY], [sTractX,sTractY];
-fespace ShS(Small, P1);
+fespace ShS(Small, P2);
 ShS sSxx, sSxy, sSyy, sSzz, sVonMises, sN;
 real NetSmallForce = int2d(Small)(SmallForce);
 // Large cylinder parameters
 real LargeR = 2.e-2;
-border LargeCirc(t=0,1){ x=LargeR-2*LargeR*t; y=0; label=2; }
+border LargeCirc(t=0,1){ x=LargeR-2*LargeR*t; y=0; label=2; };
 border Left(t=0,1){x=-LargeR; y=-LargeR*t; label=3;};
 border Right(t=0,1){x=LargeR; y=-LargeR+LargeR*t; label=4;};
 border Bottom(t=0,1){x=-LargeR+2*LargeR*t; y=-LargeR; label=5;};
 mesh Large = buildmesh(LargeCirc(20)+Left(10)+Right(10)+Bottom(10));
-Large = splitmesh(Large, 1 + 3*exp(-(y/0.003)^2));
+Large = splitmesh(Large, 1 + 3*exp(-((y/0.003)^2+(x/0.010)^2)));
 real LargeE = 5.e6*(10^(-ModulusMagnitudeReduction));
 real LargeNu = 0.09;
 real LargeRho = 1.05e3;
 real AreaLarge = int2d(Large)(1.0);
 real LargeForce = -NetSmallForce/AreaLarge;
-fespace Lh(Large,[P1,P1]);
+fespace Lh(Large,[P2,P2]);
 Lh [ldx,ldy], [lx,ly], [li,lj];
 Lh [lContX,lContY], [lOldContX,lOldContY], [lMaskX,lMaskY], [lTractX,lTractY];
-fespace LhS(Large, P1);
+fespace LhS(Large, P2);
 LhS lSxx, lSxy, lSyy, lSzz, lVonMises, lN; 
 
 // macros
@@ -101,16 +101,27 @@ Localb = MaskTensor[] ? Localg : Localb;
 setBC(LocalA,MaskTensor[],-2);
 DisplacementIncrementField[] = LocalA^-1*Localb;
 } //
-macro UpdateContact(Mesh, OtherMesh, ContactTensor, VecContactTensor, OldContactTensor, VecOldContactTensor, Sigma, TractionField, NormalTraction){
+macro UpdateContact(Mesh, OtherMesh, ContactTensor, VecContactTensor, OldContactTensor, VecOldContactTensor, Sigma, TractionField, NormalTraction, VectorFESpace, ScalarFESpace){
 VecContactTensor = [(dist(OtherMesh) < OverlapTol), (dist(OtherMesh) < OverlapTol)];
+int nodesPerElem = VectorFESpace.ndofK/2;
+bool isP2Elem = (nodesPerElem == 6);
+int nLocalNodes = isP2Elem ? 3 : 2;
 for (int k = 0; k < Mesh.nbe; k++){
   real nx = Mesh.be(k).N.x, ny = Mesh.be(k).N.y;
-  for (int i = 0; i < 2; i++){
-    int iv = int(Mesh.be(k)[i]);
-    real sxx = Sigma[0][][iv], sxy = Sigma[2][][iv], syy = Sigma[1][][iv];
-    TractionField[][2*iv]   = (sxx*nx + sxy*ny);
-    TractionField[][2*iv+1] = (sxy*nx + syy*ny);
-	NormalTraction[][iv] = TractionField[][2*iv]*nx+TractionField[][2*iv+1]*ny;
+  int t   = Mesh.be(k).Element;
+  int loc = Mesh.be(k).whoinElement;
+  int[int] localNode(nLocalNodes);
+  localNode[0] = (loc+1)%3;
+  localNode[1] = (loc+2)%3;
+  if(isP2Elem){ localNode[2] = loc+3; }
+  for (int j = 0; j < nLocalNodes; j++){
+    int ivx = VectorFESpace(t, localNode[j]);
+    int ivy = VectorFESpace(t, localNode[j]+nodesPerElem);
+    int ivs = ScalarFESpace(t, localNode[j]);
+    real sxx = Sigma[0][][ivs], sxy = Sigma[2][][ivs], syy = Sigma[1][][ivs];
+    TractionField[][ivx] = (sxx*nx + sxy*ny);
+    TractionField[][ivy] = (sxy*nx + syy*ny);
+    NormalTraction[][ivs] = TractionField[][ivx]*nx+TractionField[][ivy]*ny;
   }
 }
 VecOldContactTensor = [1,1] - VecOldContactTensor;
@@ -133,29 +144,35 @@ Small = movemesh(Small,[x,y-5.e-4]);
 [sdx,sdy]=[sdx,sdy]; [sx,sy]=[sx,sy]; [si,sj]=[si,sj]; [sContX,sContY]=[sContX,sContY]; [sOldContX,sOldContY]=[sContX,sContY]; [sMaskX,sMaskY]=[sMaskX,sMaskY]; [sTractX,sTractY]=[sTractX,sTractY];
 sSxx=sSxx; sSxy=sSxy; sSyy=sSyy; sSzz=sSzz; sVonMises = sqrt( 0.5*((sSxx-sSyy)^2 + (sSyy-sSzz)^2 + (sSzz-sSxx)^2) + 3.0*sSxy^2 ); sN=sN;
 
-for( int iter = 0; iter < SchwarzIterLim; iter++){
-meshL SmallBound = extract(Small);
+Small = movemesh(Small,[x+sdx,y+sdy]);
 meshL LargeBound = extract(Large);
-UpdateContact(Small, Large, sContX, [sContX,sContY], sOldContX, [sOldContX,sOldContY], [sSxx,sSyy,sSxy], sTractX, sN)
-UpdateContact(Large, Small, lContX, [lContX,lContY], lOldContX, [lOldContX,lOldContY], [lSxx,lSyy,lSxy], lTractX, lN)
+
+for( int iter = 0; iter < SchwarzIterLim; iter++){
+
+UpdateContact(Small, Large, sContX, [sContX,sContY], sOldContX, [sOldContX,sOldContY], [sSxx,sSyy,sSxy], sTractX, sN, Sh, ShS)
 BuildMaskTensor(SmallCirc,Sh,sMaskX,sContX,false)
-BuildMaskTensor(Bottom,Lh,lMaskX,lContX,true)
 SolveDirichlet(Small,Sh,LargeBound,sx,[sdx,sdy],sdx,sMaskX,SmallE,SmallNu,SmallForce)
 [sdx,sdy] =  SchwarzRelaxation*[sdx,sdy];
 [sx,sy] = [sx,sy] + [sdx,sdy];
+Small = movemesh(Small,[x+sdx,y+sdy]);
+meshL SmallBound = extract(Small);
 UpdateStress([sSxx,sSyy,sSxy,sSzz],[sx,sy],SmallE,SmallNu);
+[sdx,sdy]=[sdx,sdy]; [sx,sy]=[sx,sy]; [si,sj]=[si,sj]; [sContX,sContY]=[sContX,sContY]; [sOldContX,sOldContY]=[sContX,sContY]; [sMaskX,sMaskY]=[sMaskX,sMaskY]; [sTractX,sTractY]=[sTractX,sTractY];
+sSxx=sSxx; sSxy=sSxy; sSyy=sSyy; sSzz=sSzz; sVonMises = sqrt( 0.5*((sSxx-sSyy)^2 + (sSyy-sSzz)^2 + (sSzz-sSxx)^2) + 3.0*sSxy^2 ); sN=sN;
+
+UpdateContact(Large, Small, lContX, [lContX,lContY], lOldContX, [lOldContX,lOldContY], [lSxx,lSyy,lSxy], lTractX, lN, Lh, LhS)
+BuildMaskTensor(Bottom,Lh,lMaskX,lContX,true)
 SolveNeumann(Large,Lh,LargeCirc, SmallBound,lx,ldx,[lTractX,lTractY],[sTractX,sTractY],[lContX,lContY],lMaskX,LargeE,LargeNu,LargeForce)
 [ldx,ldy] =  SchwarzRelaxation*[ldx,ldy];
 [lx,ly] = [lx,ly] + [ldx,ldy];
-UpdateStress([lSxx,lSyy,lSxy,lSzz],[lx,ly],LargeE,LargeNu);
-cout << max(sdx[].linfty, sdy[].linfty) << endl;
-cout << max(ldx[].linfty, ldy[].linfty) << endl;
-Small = movemesh(Small,[x+sdx,y+sdy]);
 Large = movemesh(Large,[x+ldx,y+ldy]);
-[sdx,sdy]=[sdx,sdy]; [sx,sy]=[sx,sy]; [si,sj]=[si,sj]; [sContX,sContY]=[sContX,sContY]; [sOldContX,sOldContY]=[sContX,sContY]; [sMaskX,sMaskY]=[sMaskX,sMaskY]; [sTractX,sTractY]=[sTractX,sTractY];
-sSxx=sSxx; sSxy=sSxy; sSyy=sSyy; sSzz=sSzz; sVonMises = sqrt( 0.5*((sSxx-sSyy)^2 + (sSyy-sSzz)^2 + (sSzz-sSxx)^2) + 3.0*sSxy^2 ); sN=sN;
+meshL LargeBound = extract(Large);
+UpdateStress([lSxx,lSyy,lSxy,lSzz],[lx,ly],LargeE,LargeNu);
 [ldx,ldy]=[ldx,ldy]; [lx,ly]=[lx,ly]; [li,lj]=[li,lj]; [lContX,lContY]=[lContX,lContY]; [lOldContX,lOldContY]=[lContX,lContY]; [lMaskX,lMaskY]=[lMaskX,lMaskY]; [lTractX,lTractY]=[lTractX,lTractY];
 lSxx=lSxx; lSxy=lSxy; lSyy=lSyy; lSzz=lSzz; lVonMises = sqrt( 0.5*((lSxx-lSyy)^2 + (lSyy-lSzz)^2 + (lSzz-lSxx)^2) + 3.0*lSxy^2 ); lN=lN;
+
+cout << max(sdx[].linfty, sdy[].linfty) << endl;
+cout << max(ldx[].linfty, ldy[].linfty) << endl;
 
 // Save data 
 mesh Combined = Small + Large;
@@ -166,7 +183,22 @@ string filename;
 if(iter < 10) filename = "Data0"+iter;
 else filename = "Data"+iter;
 savevtk(filename+".vtu", Combined, VonMises, ContactPoints, dataname="VonMises ContactPoints", order=vtkorder);
-if (max(max(sdx[].linfty, sdy[].linfty),max(ldx[].linfty, ldy[].linfty) || ((max(max(sdx[].linfty, sdy[].linfty),max(ldx[].linfty, ldy[].linfty)) / max(max(max(sdx[].linfty, sdy[].linfty),max(ldx[].linfty, ldy[].linfty)),1e-21)))< SchwarzRelTol ) < SchwarzAbsTol ){cout << "Iterations needed: " << iter <<endl; break;}
+real LinfAbsErr = max(max(sdx[].linfty, sdy[].linfty),max(ldx[].linfty, ldy[].linfty));
+real LinfDisp = max(max(sx[].linfty, sy[].linfty),max(lx[].linfty, ly[].linfty));
+if ( (LinfAbsErr < SchwarzAbsTol) || ((LinfDisp / LinfAbsErr) < SchwarzRelTol) ) {cout << "Iterations needed: " << iter << endl; break;}
 }
-cout << "contact length possibly" << int1d(Small,SmallCirc)(sContX) << endl;
-cout << "traction integrated" << int1d(Small,SmallCirc)(sTractY*sContX) << endl;
+
+mesh Combined = Small + Large;
+fespace CombinedSpace(Combined,P1); 
+CombinedSpace VonMises = sVonMises*chi(Small)(x,y) + lVonMises*chi(Large)(x,y);
+CombinedSpace ContactPoints = sContX*chi(Small)(x,y) + lContX*chi(Large)(x,y);
+plot(VonMises,Combined,value=true,fill=true,boundary=false,svg="VonMises.svg",pdf="VonMises.pdf",ps="VonMises.eps");
+plot(ContactPoints,value=true,fill=true,boundary=false,svg="ContactPoints.svg",pdf="ContactPoints.pdf",ps="ContactPoints.eps");
+
+cout << "contact length on cylinder: " << int1d(Small,SmallCirc)(sContX) << endl;
+cout << "contact length on block: " << int1d(Large,LargeCirc)(lContX) << endl;
+cout << "traction integrated on cylinder: ( " << int1d(Small,SmallCirc)(sTractX) << " , " << int1d(Small,SmallCirc)(sTractY) << " )" << endl;
+cout << "contact traction integrated on cylinder: ( " << int1d(Small,SmallCirc)(sTractX*sContX) << " , " << int1d(Small,SmallCirc)(sTractY*sContY) << " )" << endl;
+cout << "traction integrated on block: ( " << int1d(Large,LargeCirc)(lTractX) << " , " << int1d(Large,LargeCirc)(lTractY) << " )" << endl;
+cout << "contact traction integrated on block: ( " << int1d(Large,LargeCirc)(lTractX*lContX) << " , " << int1d(Large,LargeCirc)(lTractY*lContY) << " )" << endl;
+cout << "gravity on cylinder" << NetSmallForce << endl;

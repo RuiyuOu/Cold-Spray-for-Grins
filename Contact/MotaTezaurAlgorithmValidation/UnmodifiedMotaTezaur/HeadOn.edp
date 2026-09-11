@@ -1,33 +1,41 @@
 load "iovtk" 
 include "ContactFunctions.idp"
 string filenum;
-int[int] vtkorder = [1,1,1];
+int[int] vtkorder = [1,1,1,1];
 
-bool EquivVel = 0;
-bool EquivAccel = 0;
+bool EquivVel = 1;
+bool EquivAccel = 1;
 bool NullAccel = 0;
 
 int SchwarzIterMax = 20;
 real SchwarzAbsTol = 1e-12;
 real SchwarzRelTol = 1e-15;
+real SchwarzRelaxation = 1;
 
-bool Contact; 
-bool Persistance;
+bool Contact=false; 
 real OverlapTol = 1e-9;
 
+// Material
+real E = 1.0e9, nu = 0., rho = 1000.0;
+real lambda=E*nu/((1.+nu)*(1.-2.*nu));
+real mu=E/(2.*(1.+nu));
+func Elas = [[2*mu+lambda, lambda, 0.],[lambda, 2*mu+lambda, 0.],[0.,0.,mu]];
+
 // Geometry
-real Lbar = 1.e-3; real Hbar = 1.e-4;
+real Lbar = 250.e-3; real Hbar = 10.e-3;
 int L1 = 50; int H1 = 5;
-int L2 = 50; int H2 = 7;
-real SplitFactor = 0;
-real SplitScale = 1; 
+int L2 = 50; int H2 = 5;
+real SplitFactor = 2;
+real SplitScale = 1e-3; 
 
 border B1bot(t=-Lbar,0){x=t; y=-Hbar/2; label=11;}
 border B1right(t=-Hbar/2,Hbar/2){x=0; y=t; label=12;}
 border B1top(t=0,-Lbar){x=t; y=Hbar/2; label=13;}
 border B1left(t=Hbar/2,-Hbar/2){x=-Lbar; y=t; label=14;}
 mesh Bar1 = buildmesh(B1bot(L1)+B1right(H1)+B1top(L1)+B1left(H1));
-meshL Bar1Right = extract(Bar1,[12]);
+Bar1 = splitmesh(Bar1, 1 + SplitFactor*exp(-(x/SplitScale)^2));
+int[int] Bar1Bound = [12];
+meshL Bar1Right = extract(Bar1,label=Bar1Bound);
 
 border B2bot(t=0,Lbar){x=t; y=-Hbar/2; label=21;}
 border B2right(t=-Hbar/2,Hbar/2){x=Lbar; y=t; label=22;}
@@ -35,41 +43,39 @@ border B2top(t=Lbar,0){x=t; y=Hbar/2; label=23;}
 border B2left(t=Hbar/2,-Hbar/2){x=0; y=t; label=24;}
 mesh Bar2 = buildmesh(B2bot(L2)+B2right(H2)+B2top(L2)+B2left(H2));
 Bar2 = splitmesh(Bar2, 1 + SplitFactor*exp(-(x/SplitScale)^2));
-meshL Bar2Left = extract(Bar2,[24]);
-// Material
-real E = 1.0e9, nu = 0.25, rho = 1000.0;
-real lambda = E*nu/((1.+nu)*(1.-2.*nu));
-real mu = E/(2.*(1.+nu));
-func Elas = [[2*mu+lambda, lambda, 0.],[lambda, 2*mu+lambda, 0.],[0.,0.,mu]];
+int[int] Bar2Bound = [24];
+meshL Bar2Left = extract(Bar2,label=Bar2Bound);
 
+plot(Bar1,Bar2,wait=true);
 // Macro
-macro epsi(u) ([dx(u[0]),dy(u[1]),dx(u[1])+dy(u[0])]) // 
+macro epsi(u) ([dx(u[0]),dy(u[1]),(dx(u[1])+dy(u[0]))]) // 
 macro M(a,p) (rho*(a[0]*p[0]+a[1]*p[1])) //
 macro K(a,p) (epsi(a)'*Elas*epsi(p)) //
 
 // Finite Element Spaces
-fespace Vh1(Bar1,[P2,P2]);
-fespace Vh2(Bar2,[P2,P2]);
+fespace Vh1(Bar1,[P1,P1]);
+fespace Vh2(Bar2,[P1,P1]);
 Vh1 [u1x,u1y], [v1x,v1y], [a1x,a1y], [d1x,d1y], [ad1x,ad1y], [p1i,p1j];
 Vh1 [Mask1x,Mask1y], [Cont1x,Cont1y], [OldCont1x,OldCont1y], [Trac1x,Trac1y];
 Vh2 [u2x,u2y], [v2x,v2y], [a2x,a2y], [d2x,d2y], [ad2x,ad2y], [p2i,p2j];
 Vh2 [Mask2x,Mask2y], [Cont2x,Cont2y], [OldCont2x,OldCont2y], [Trac2x,Trac2y];
-fespace Sh1(Bar1,P2);
-fespace Sh2(Bar2,P2);
+fespace Sh1(Bar1,P1);
+fespace Sh2(Bar2,P1);
 Sh1 Sxx1,Sxy1,Syy1, N1;
 Sh2 Sxx2,Sxy2,Syy2, N2;
 
 // Initialize 
-int steps = 400;
-real t0 = 0;
-real t = 3e-6;
-real dt = (t-t0)/steps;
+real t0 = -2e-6;
+real t = 8e-6;
+real dt = 1e-8;
+int steps = (t-t0)/dt;
 real v = 100.;
 real g = -t0*v;
 [u1x,u1y] = [-g,0]; [v1x,v1y] = [v,0];
 [u2x,u2y] = [g,0]; [v2x,v2y] = [-v,0];
 Bar1 = movemesh(Bar1,[x+u1x,y+u1y]); Bar2 = movemesh(Bar2,[x+u2x,y+u2y]);
-plot(Bar1,Bar2);
+[u1x,u1y]=[0,0];[u2x,u2y]=[0,0];
+//plot(Bar1,Bar2);
 
 // Newark Parameters
 real gamma = 0.5;
@@ -87,15 +93,19 @@ real C7 = c7(dt,beta,gamma);
 real AlphaM = 0.0;
 real AlphaK = 0.0;
 
+for (int nt=0; nt<steps; nt++){
+
+cout << "Step: " << nt << endl;
+
+// Reset accumulated displacement increment
+[ad1x,ad1y]=[0,0]; [ad2x,ad2y]=[0,0];
+
+for(int SchwarzIter = 0; SchwarzIter <= SchwarzIterMax; SchwarzIter++){
 // Build matrices
 varf Bar1M([pxx,pyy],[pvi,pvj],init=0) = int2d(Bar1)(M([pxx,pyy],[pvi,pvj]));
 varf Bar1K([pxx,pyy],[pvi,pvj],init=0) = int2d(Bar1)(K([pxx,pyy],[pvi,pvj]));
 varf Bar2M([pxx,pyy],[pvi,pvj],init=0) = int2d(Bar2)(M([pxx,pyy],[pvi,pvj]));
 varf Bar2K([pxx,pyy],[pvi,pvj],init=0) = int2d(Bar2)(K([pxx,pyy],[pvi,pvj]));
-
-for (int nt=0; nt<steps; nt++){
-
-for(int SchwarzIter = 0; SchwarzIter <= SchwarzIterMax; SchwarzIter++){
 // Reset error values
 real AbsErr = 1e30; real RelErr = 1e30;
 
@@ -110,6 +120,17 @@ matrix AForce1 = C4*M1+C5*Ra1;
 R1+= AForce1*a1x[];
 set(KBar1,solver="CG");
 d1x[] = KBar1^-1*R1;
+[u1x,u1y] = [u1x+d1x,u1y+d1y];
+[ad1x,ad1y] = [ad1x+d1x,ad1y+d1y];
+Sxx1 = lambda*(dx(u1x)+dy(u1y)) + 2*mu*dx(u1x); 
+Syy1 = lambda*(dx(u1x)+dy(u1y)) + 2*mu*dy(u1y);
+Sxy1 = mu*(dy(u1x)+dx(u1y))/sqrt2;
+Bar1 = movemesh(Bar1,[x+d1x,y+d1y]);
+Bar1Right = extract(Bar1,label=Bar1Bound);
+UpdateContact(Bar1,Bar2,Cont1x,[Cont1x,Cont1y],OldCont1x,[OldCont1x,OldCont1y],[Sxx1,Syy1,Sxy1],Trac1x,N1, Vh1, Sh1)
+UpdateKinematics(ad1x,u1x,v1x,a1x,C1,C6,C7,M1,Ra1,K1,0)
+[u1x,u1y]=[u1x,u1y]; [v1x,v1y]=[v1x,v1y]; [a1x,a1y]=[a1x,a1y]; [d1x,d1y]=[d1x,d1y];
+[Mask1x,Mask1y]=[Mask1x,Mask1y]; [Cont1x,Cont1y]=[Cont1x,Cont1y]; [OldCont1x,OldCont1y]=[Cont1x,Cont1y]; [Trac1x,Trac1y]=[Trac1x,Trac1y]; N1=N1;
 
 matrix M2 = Bar2M(Vh2,Vh2);
 matrix K2 = Bar2K(Vh2,Vh2);
@@ -121,19 +142,29 @@ matrix AForce2 = C4*M2+C5*Ra2;
 R2+= AForce2*a2x[];
 set(KBar2,solver="CG");
 d2x[] = KBar2^-1*R2;
+[u2x,u2y] = [u2x+d2x,u2y+d2y];
+[ad2x,ad2y] = [ad2x+d2x,ad2y+d2y];
+Sxx2 = lambda*(dx(u2x)+dy(u2y)) + 2*mu*dx(u2x); 
+Syy2 = lambda*(dx(u2x)+dy(u2y)) + 2*mu*dy(u2y);
+Sxy2 = mu*(dy(u2x)+dx(u2y))/sqrt2; 
+UpdateKinematics(ad2x,u2x,v2x,a2x,C1,C6,C7,M2,Ra2,K2,0)
+} // End no contact if
 
-}
 else{
 if(SchwarzIter==0){SchwarzIter+=1;}
 matrix M1 = Bar1M(Vh1,Vh1);
 matrix K1 = Bar1K(Vh1,Vh1);
 matrix Ra1 = AlphaM*M1+AlphaK*K1;
 matrix KBar1 = C0*M1+C1*Ra1+K1;
-matrix VForce = C2*M1+C3*Ra1;
-real[int] R1 = VForce*v1x[]; 
-matrix AForce = C4*M1+C5*Ra1;
-R1+= AForce*a1x[];
+matrix VForce1 = C2*M1+C3*Ra1;
+real[int] R1 = VForce1*v1x[]; 
+matrix AForce1 = C4*M1+C5*Ra1;
+R1+= AForce1*a1x[];
 [d1x,d1y] = [projection(Bar2Left).x-x,projection(Bar2Left).y-y];
+varf LocalContactMask([u1x,u1y],[v1x,v1y]) = on(Bar1Bound,u1x=1,u1y=1);
+real[int] LocalEdgeIndicator=LocalContactMask(0,Vh1, tgv=1);
+Mask1x[] = LocalEdgeIndicator;
+Mask1x[] = Cont1x[].*Mask1x[];
 real[int] g1 = Mask1x[].*d1x[];
 real[int] bBS1 = KBar1*g1;
 real[int] b1 = R1 - bBS1;
@@ -141,6 +172,18 @@ b1 = Mask1x[] ? g1 : b1;
 setBC(KBar1,Mask1x[],-2);
 set(KBar1,solver="CG");
 d1x[] = KBar1^-1*b1;
+d1x[] *= SchwarzRelaxation;
+[u1x,u1y] = [u1x+d1x,u1y+d1y];
+[ad1x,ad1y] = [ad1x+d1x,ad1y+d1y];
+Sxx1 = lambda*(dx(u1x)+dy(u1y)) + 2*mu*dx(u1x); 
+Syy1 = lambda*(dx(u1x)+dy(u1y)) + 2*mu*dy(u1y);
+Sxy1 = mu*(dy(u1x)+dx(u1y)); 
+Bar1 = movemesh(Bar1,[x+d1x,y+d1y]);
+Bar1Right = extract(Bar1,label=Bar1Bound);
+UpdateContact(Bar1,Bar2,Cont1x,[Cont1x,Cont1y],OldCont1x,[OldCont1x,OldCont1y],[Sxx1,Syy1,Sxy1],Trac1x,N1, Vh1, Sh1)
+UpdateKinematics(ad1x,u1x,v1x,a1x,C1,C6,C7,M1,Ra1,K1,0)
+[u1x,u1y]=[u1x,u1y]; [v1x,v1y]=[v1x,v1y]; [a1x,a1y]=[a1x,a1y]; [d1x,d1y]=[d1x,d1y];
+[Mask1x,Mask1y]=[Mask1x,Mask1y]; [Cont1x,Cont1y]=[Cont1x,Cont1y]; [OldCont1x,OldCont1y]=[Cont1x,Cont1y]; [Trac1x,Trac1y]=[Trac1x,Trac1y]; N1=N1;
 
 matrix M2 = Bar2M(Vh2,Vh2);
 matrix K2 = Bar2K(Vh2,Vh2);
@@ -154,25 +197,24 @@ R2+= AForce2*a2x[];
 [Trac2x,Trac2y] = -1*[Trac2x,Trac2y];
 varf Neumann([u,v],[uu,vv]) = int1d(Bar2, 24)( ([Cont2x,Cont2y].*[Trac2x,Trac2y])'*[uu,vv]);
 real[int] NeumannBC = Neumann(0,Vh2);
-R1 = R1 + NeumannBC;
+R2 = R2 - NeumannBC;
 set(KBar2,solver="CG");
 d2x[] = KBar2^-1*R2;
-} //
-}
-
-// Update contact surface and move mesh and fields
-Bar1 = movemesh(Bar1,[x+d1x,y+d1y]);
+d2x[] *= SchwarzRelaxation;
+[u2x,u2y] = [u2x+d2x,u2y+d2y];
+[ad2x,ad2y] = [ad2x+d2x,ad2y+d2y];
+Sxx2 = lambda*(dx(u2x)+dy(u2y)) + 2*mu*dx(u2x); 
+Syy2 = lambda*(dx(u2x)+dy(u2y)) + 2*mu*dy(u2y);
+Sxy2 = mu*(dy(u2x)+dx(u2y)); 
 Bar2 = movemesh(Bar2,[x+d2x,y+d2y]);
-Bar1Right = extract(Bar1,[12]);
-Bar2Left = extract(Bar2,[24]);
-[u1x,u1y]=[u1x,u1y]; [v1x,v1y]=[v1x,v1y]; [a1x,a1y]=[a1x,a1y]; [d1x,d1y]=[d1x,d1y];
-[Mask1x,Mask1y]=[Mask1x,Mask1y]; [Cont1x,Cont1y]=[Cont1x,Cont1y]; [OldCont1x,OldCont1y]=[Cont1x,Cont1y]; [Trac1x,Trac1y]=[Trac1x,Trac1y];
+Bar2Left = extract(Bar2,label=Bar2Bound);
+UpdateContact(Bar2,Bar1,Cont2x,[Cont2x,Cont2y],OldCont2x,[OldCont2x,OldCont2y],[Sxx2,Syy2,Sxy2],Trac2x,N2, Vh2, Sh2)
+UpdateKinematics(ad2x,u2x,v2x,a2x,C1,C6,C7,M2,Ra2,K2,0)
 [u2x,u2y]=[u2x,u2y]; [v2x,v2y]=[v2x,v2y]; [a2x,a2y]=[a2x,a2y]; [d2x,d2y]=[d2x,d2y];
-[Mask2x,Mask2y]=[Mask2x,Mask2y]; [Cont2x,Cont2y]=[Cont2x,Cont2y]; [OldCont2x,OldCont2y]=[Cont2x,Cont2y]; [Trac2x,Trac2y]=[Trac2x,Trac2y];
-UpdateContact(Bar1,Bar2Left,Cont1x,[Cont1x,Cont1y],OldCont1x,[OldCont1x,OldCont1y],[Sxx1,Syy1,Sxy1],Trac1x,N1)
-UpdateContact(Bar2,Bar1Right,Cont2x,[Cont2x,Cont2y],OldCont2x,[OldCont2x,OldCont2y],[Sxx2,Syy2,Sxy2],Trac2x,N2)
-Contact = ActiveContact(Cont1x);
+[Mask2x,Mask2y]=[Mask2x,Mask2y]; [Cont2x,Cont2y]=[Cont2x,Cont2y]; [OldCont2x,OldCont2y]=[Cont2x,Cont2y]; [Trac2x,Trac2y]=[Trac2x,Trac2y]; N2=N2;
 
+} // End contact Else
+Contact = ActiveContact(Cont1x[]);
 // Convergence check and max iteration check
 AbsErr = sqrt(int2d(Bar1)([d1x,d1y]'*[d1x,d1y])+ int2d(Bar2)([d2x,d2y]'*[d2x,d2y]));
 RelErr = AbsErr / sqrt(int2d(Bar1)([u1x,u1y]'*[u1x,u1y]) + int2d(Bar2)([u2x,u2y]'*[u2x,u2y]) + 1e-30);
@@ -182,29 +224,19 @@ cout << "RelErr: " << RelErr << " . AbsErr: " << AbsErr << endl;
 break;}
 if(SchwarzIter == SchwarzIterMax){cout << "Schwarz DDM did not converge" << endl;
 cout << "RelErr: " << RelErr << " . AbsErr: " << AbsErr << endl;}
-
-}
-
-UpdateKinematics(d1x[],u1x[],v1x[],a1x[],C1,C6,C7,M1,C1,K1,0)
-UpdateKinematics(d2x[],u2x[],v2x[],a2x[],C1,C6,C7,M2,C2,K2,0)
-// With the current problme being completely linear only in dx
-// there is no difference with setting the equivalent velocity
-// or acceleration portion of the Dirichlet conditions before 
-// the Schwarz solve or after.
-if(EquivVel){[v1x,v1y] = Mask1x[] ? [v2x(projection(Bar2Left).x,projection(Bar2Left).y),v2y(projection(Bar2Left).x,projection(Bar2Left).y)] : [v1x,v2y];}
-if(EquivAccel){[a1x,a1y] = Mask1x[] ? [a2x(projection(Bar2Left).x,projection(Bar2Left).y),a2y(projection(Bar2Left).x,projection(Bar2Left).y)] : [a1x,a2y];}
-if(NullAccel){[a1x,a1y] = Mask1x[] ? [0,0] : [a1x,a2y];}
+}// End Schwarz DDM for
 
 mesh Combined = Bar1+Bar2;
 fespace CS(Combined,P1);
 CS Cont = Cont1x*chi(Bar1)(x,y)+Cont2x*chi(Bar2)(x,y);
 CS ps = (dx(u1x)+dy(u1y))*chi(Bar1)(x,y)+(dx(u2x)+dy(u2y))*chi(Bar2)(x,y);
 CS ss = (dy(u1x)-dx(u1y))*chi(Bar1)(x,y)+(dy(u2x)-dx(u2y))*chi(Bar2)(x,y);
+CS Traction = N1*chi(Bar1)(x,y)+N2*chi(Bar2)(x,y);
 
 if (nt < 10) filenum = "00" + nt;
 else if (nt<100) filenum = "0" + nt;
 else filenum = nt;
 
-savevtk("HeadOn"+filenum+".vtk", Combined, Cont, ps, ss, dataname="ContactSurface PressureWave ShearWave", order=vtkorder);
+savevtk("HeadOn"+filenum+".vtk", Combined, Cont, ps, ss, Traction, dataname="ContactSurface PressureWave ShearWave Traction", order=vtkorder);
 
 }

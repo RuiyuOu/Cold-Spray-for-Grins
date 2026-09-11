@@ -28,12 +28,14 @@ p=0;
 SigVM=0; 
 Temp=T0;
 
+Sh EpsRate;
+
 real EStart = 0.5*rho*2*3*scale^2*vimp^2;
 real HMax 	= rho*Cp*(Tm-T0)*2*3*scale^2;
 cout << "EStart" << EStart << endl;
 cout << "Max heat energy" << HMax << endl;
 
-int[int] vtkorder = [1,1,1,1,1];
+int[int] vtkorder = [1,1,1,1,1,1];
 
 real C0 = c0(dt);
 real C1 = c1(dt);
@@ -175,6 +177,7 @@ for ( int nt = 0; nt < steps; nt++ ){
 		pw = dx(xx)+dy(yy);
 		sw = dy(xx)-dx(yy);
 		SigVM = SigmaVM([DevXX,DevYY,DevZZ,DevXY]);
+		EpsRate = sqrt(eps([vx,vy])'*eps([vx,vy]));
 
 		if 		(nt < 10) 	filenum = "000"	+nt;
 		else if (nt < 100) 	filenum = "00"	+nt;
@@ -183,8 +186,8 @@ for ( int nt = 0; nt < steps; nt++ ){
 	
     	savevtk(outdir+"Plastic"+filenum+".vtu", 
 				PhDeformed, 
-				[xx,yy], pw, sw, SigVM, Temp,
-				dataname="Displacement PressureWave ShearWave vonMisesStress Temperature",
+				[xx,yy], pw, sw, SigVM, Temp, EpsRate,
+				dataname="Displacement PressureWave ShearWave vonMisesStress Temperature StrainRate",
 				order=vtkorder);
 	}
 }
