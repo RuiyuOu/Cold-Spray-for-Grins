@@ -1,0 +1,9 @@
+load "gmsh"
+load "iovtk"
+
+mesh Twoh = gmshload("grains2d_fixed.msh");
+plot(Twoh, wait=1);
+savevtk("2DGrains.vtu", Twoh);
+
+//mesh3 Threeh = gmshload3("grains3d.msh");
+//plot(Threeh,wait=1);
