@@ -1,0 +1,7 @@
+seed=1
+n_grains=100
+clscale=0.3
+neper_command=neper -T -n 100 -dim 2 -id 1 -reg 1 -oridescriptor euler-bunge -format tess,geo,ori
+neper_version=5.0.1-7
+gmsh_version=4.14.0-git
+date=2026-09-30T07:39:30-04:00

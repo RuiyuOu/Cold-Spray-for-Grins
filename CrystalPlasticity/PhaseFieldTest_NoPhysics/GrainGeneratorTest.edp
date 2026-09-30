@@ -1,0 +1,27 @@
+load "gmsh"
+load "iovtk"
+
+// The grains are made by Neper. github.com/neperfepx/neper
+
+// --------- 2D Case ----------
+// Read Neper gmsh
+mesh Twoh = gmshload("grains2d_fixed.msh");
+plot(Twoh,wait=1);
+// Build Orientation Visualization
+int N = 100;
+int[int] vtk2order = [0];
+real[int] theta(N);
+{
+    ifstream f("C:/ColdSprayForGrins/CrystalPlasticity/PhaseFieldTest_NoPhysics/grains2d_theta_rad.txt");
+    for (int i = 0; i < N; i++) f >> theta(i);
+}
+fespace Ph(Twoh, P0);
+Ph th;
+for (int k = 0; k < Twoh.nt; k++) th[][k] = theta(Twoh[k].region - 1);
+plot(th, fill=1, value=1, wait=1);
+savevtk("2DGrains.vtu", Twoh, th, dataname="Orientation", order=vtk2order);
+
+// --------- 3D Case ----------
+mesh3 Threeh = gmshload3("grains3d_fixed.msh");
+plot(Threeh,wait=1);
+savevtk("3DGrains.vtu", Threeh);
