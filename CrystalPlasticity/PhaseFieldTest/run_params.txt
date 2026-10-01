@@ -1,0 +1,7 @@
+seed=35918
+n_grains=50
+clscale=0.3
+neper_command=neper -T -n 50 -dim 2 -id 35918 -reg 1 -oridescriptor euler-bunge -format tess,geo,ori
+neper_version=5.0.1-7
+gmsh_version=4.14.0-git
+date=2026-09-30T18:48:05-04:00

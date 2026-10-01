@@ -1,0 +1,42 @@
+load "gmsh"
+load "iovtk"
+
+mesh Twoh = gmshload("grains2d_fixed.msh");
+Twoh = adaptmesh(Twoh, 1/50., IsMetric=true);
+int maxRegion;
+for (int k = 0; k < Twoh.nt; ++k)
+    maxRegion = max(maxRegion, Twoh[k].region);
+int n = maxRegion;
+real[int] theta(n);
+{
+    ifstream f("grains2d_theta_rad.txt");
+    for (int i = 0; i < n; i++) f >> theta(i);
+}
+fespace InitH(Twoh, P0);
+InitH theta0, eta0;
+for (int k = 0; k < Twoh.nt; k++) theta0[][k] = theta(Twoh[k].region - 1);
+plot(Twoh, wait=1);
+
+fespace OriH(Twoh,P1);
+OriH Eta, Theta=theta0, dEta;
+
+int[int] vtkorder2 = [1,1];
+savevtk("InitBefore.vtk", Twoh, Theta, Eta, dataname="Orientation Alignment", order=vtkorder2);
+
+Twoh = adaptmesh(Twoh, Theta, err = 0.05, hmin=0.01);
+//Theta = theta0;
+plot(Twoh, wait=true);
+
+// ---- Eta misorientation initialization strategies ---- 
+
+// Init Eta with the following: depending on local grain misorientation. 
+// Formula: exp[ -( Norm(Misorientation) / RefMisorientation )^p ]
+// So if no misorientation locally = 1. A lot (near/at grain boundary): 0. 
+// If 2 grains are more aligned, then the grain boundary should be more aligned.
+real p = 2;
+real RefMisori = 100;
+Eta = exp(-1*( sqrt(dx(Theta)^2+dy(Theta)^2) / RefMisori )^p);
+plot(Eta,fill=true,value=true,wait=true);
+savevtk("InitGradNorm.vtk", Twoh, Theta, Eta, dataname="Orientation Alignment", order=vtkorder2);
+OriH GradNorm = sqrt(dx(Theta)^2 + dy(Theta)^2);
+plot(GradNorm, fill=true, value=true);

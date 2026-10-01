@@ -8,12 +8,15 @@ load "iovtk"
 mesh Twoh = gmshload("grains2d_fixed.msh");
 plot(Twoh,wait=1);
 // Build Orientation Visualization
-int N = 100;
+int maxRegion = 0;
+for (int k = 0; k < Twoh.nt; ++k)
+    maxRegion = max(maxRegion, Twoh[k].region);
+int n = maxRegion;
 int[int] vtk2order = [0];
-real[int] theta(N);
+real[int] theta(n);
 {
     ifstream f("C:/ColdSprayForGrins/CrystalPlasticity/PhaseFieldTest_NoPhysics/grains2d_theta_rad.txt");
-    for (int i = 0; i < N; i++) f >> theta(i);
+    for (int i = 0; i < n; i++) f >> theta(i);
 }
 fespace Ph(Twoh, P0);
 Ph th;

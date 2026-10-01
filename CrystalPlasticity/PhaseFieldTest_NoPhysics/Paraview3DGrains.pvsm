@@ -15197,7 +15197,7 @@
         <Domain name="range" id="144119.OcclusionStrength.range"/>
       </Property>
       <Property name="Opacity" id="144119.Opacity" number_of_elements="1">
-        <Element index="0" value="0.27"/>
+        <Element index="0" value="0.25"/>
         <Domain name="range" id="144119.Opacity.range"/>
       </Property>
       <Property name="OpacityArray" id="144119.OpacityArray" number_of_elements="5">
@@ -17270,7 +17270,7 @@
         <Domain name="range" id="152164.OcclusionStrength.range"/>
       </Property>
       <Property name="Opacity" id="152164.Opacity" number_of_elements="1">
-        <Element index="0" value="1"/>
+        <Element index="0" value="0.64"/>
         <Domain name="range" id="152164.Opacity.range"/>
       </Property>
       <Property name="OpacityArray" id="152164.OpacityArray" number_of_elements="5">
@@ -19782,30 +19782,30 @@
         <Element index="0" value="0"/>
       </Property>
       <Property name="CameraFocalPoint" id="6840.CameraFocalPoint" number_of_elements="3">
-        <Element index="0" value="0.48635491040953815"/>
-        <Element index="1" value="0.5676297922115143"/>
-        <Element index="2" value="0.43519285879116393"/>
+        <Element index="0" value="0.7445402344779696"/>
+        <Element index="1" value="0.9424382999537737"/>
+        <Element index="2" value="0.6201968811526142"/>
       </Property>
       <Property name="CameraFocalPointInfo" id="6840.CameraFocalPointInfo" number_of_elements="3">
-        <Element index="0" value="0.48635491040953815"/>
-        <Element index="1" value="0.5676297922115143"/>
-        <Element index="2" value="0.43519285879116393"/>
+        <Element index="0" value="0.7445402344779696"/>
+        <Element index="1" value="0.9424382999537737"/>
+        <Element index="2" value="0.6201968811526142"/>
       </Property>
       <Property name="CameraParallelScale" id="6840.CameraParallelScale" number_of_elements="1">
-        <Element index="0" value="0.8660254037844386"/>
+        <Element index="0" value="1.0392304845413265"/>
       </Property>
       <Property name="CameraParallelScaleInfo" id="6840.CameraParallelScaleInfo" number_of_elements="1">
-        <Element index="0" value="0.8660254037844386"/>
+        <Element index="0" value="1.0392304845413265"/>
       </Property>
       <Property name="CameraPosition" id="6840.CameraPosition" number_of_elements="3">
-        <Element index="0" value="2.6814707938508144"/>
-        <Element index="1" value="2.5317135135756774"/>
-        <Element index="2" value="2.0226416977911836"/>
+        <Element index="0" value="2.8580313221563407"/>
+        <Element index="1" value="2.2985318852536225"/>
+        <Element index="2" value="1.7226541133491682"/>
       </Property>
       <Property name="CameraPositionInfo" id="6840.CameraPositionInfo" number_of_elements="3">
-        <Element index="0" value="2.6814707938508144"/>
-        <Element index="1" value="2.5317135135756774"/>
-        <Element index="2" value="2.0226416977911836"/>
+        <Element index="0" value="2.8580313221563407"/>
+        <Element index="1" value="2.2985318852536225"/>
+        <Element index="2" value="1.7226541133491682"/>
       </Property>
       <Property name="CameraViewAngle" id="6840.CameraViewAngle" number_of_elements="1">
         <Element index="0" value="30"/>
@@ -19814,14 +19814,14 @@
         <Element index="0" value="30"/>
       </Property>
       <Property name="CameraViewUp" id="6840.CameraViewUp" number_of_elements="3">
-        <Element index="0" value="-0.25427752760235345"/>
-        <Element index="1" value="-0.41994843441351587"/>
-        <Element index="2" value="0.8711981699877883"/>
+        <Element index="0" value="-0.2153970383728839"/>
+        <Element index="1" value="-0.39156628471146454"/>
+        <Element index="2" value="0.8945836800084443"/>
       </Property>
       <Property name="CameraViewUpInfo" id="6840.CameraViewUpInfo" number_of_elements="3">
-        <Element index="0" value="-0.25427752760235345"/>
-        <Element index="1" value="-0.41994843441351587"/>
-        <Element index="2" value="0.8711981699877883"/>
+        <Element index="0" value="-0.2153970383728839"/>
+        <Element index="1" value="-0.39156628471146454"/>
+        <Element index="2" value="0.8945836800084443"/>
       </Property>
       <Property name="EyeAngle" id="6840.EyeAngle" number_of_elements="1">
         <Element index="0" value="2"/>
