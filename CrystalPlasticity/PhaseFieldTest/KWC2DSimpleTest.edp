@@ -1,0 +1,132 @@
+load "iovtk"
+
+real nu = 1e-2; real s = 1e0; // Original KWC
+real eps2 = 2e-2; 			  // Cosserat term
+real gamma = 1e3;
+real time = 5; int steps = 100; real dt = time/steps;
+string filenum; int[int] vtkorder = [1,1,1,1];
+real delta = 1e-9; 
+int MaxNewton = 20; real NewtRelax = 1.0;
+real RelNewtTol = 1e-6; real AbsNewtTol = 1e-9;
+
+// --- Build Mesh ---
+int nx = 30;
+int ny = 20;
+
+mesh KWCh = square(nx, ny, [12e-1*x, 10e-1*y]);
+KWCh = change(KWCh,fregion = (x < 4e-1) ? 1 : ((x >= 4e-1 && y > 5e-1) ? 2 : 3 ));
+//KWCh = adaptmesh(KWCh, 3e-2, IsMetric=1);
+mesh NKWCh = KWCh;
+
+fespace InitField(KWCh, P0); 
+InitField Theta0 = (region == 1) ? 0 : ((region == 2) ? pi/3 : -pi/3);
+
+fespace Fields(KWCh, [P1,P1]);
+Fields [Eta,Theta]=[1,Theta0], [dEta,dTheta], [EtaOld,ThetaOld], [v,w];
+//KWCh = adaptmesh(KWCh, Theta, err = 0.2, hmin=nu/3.);
+plot(KWCh,wait=true);
+fespace NFields(NKWCh, [P1,P1]);
+NFields [NEta,NTheta]=[1,Theta0], [dNEta,dNTheta], [NEtaOld,NThetaOld], [nv,nw];
+//NKWCh = adaptmesh(NKWCh, NTheta, err = 0.2, hmin=nu/3.);
+
+// --- Macros ---
+// p is for prime - derivative 
+macro fp(p)  (p - 1) // f'(phi),  f = 0.5*(1-phi)^2
+macro g(p)   (p*p) // g(phi) = phi^2
+macro gp(p)  (2.*p) //
+
+macro grnorm() (sqrt(dx(Theta)^2 + dy(Theta)^2 + delta^2)) // grad norm of Theta
+macro tanhgam() (tanh(gamma*grnorm)/grnorm) // smooth approximation of 1/grnorm
+macro sech2(x) (4.*exp(-2.*(x))/(1. + exp(-2.*(x)))^2) //
+macro sechgam() (gamma*sech2(gamma*grnorm)) // sech^2 term from smooth approximation
+macro grdot(a,b) (dx(a)*dx(b) + dy(a)*dy(b)) // grad a dot Test Func
+macro lcosh() ((gamma*grnorm+log(1.+ exp(-2.*gamma*grnorm))-log(2.))/gamma)//
+
+// --- Physics --- 
+
+// Init in Eta
+fespace Transfer(KWCh,P1); Transfer EtaT, tt; 
+solve InitEta(EtaT,tt) = 
+	int2d(KWCh)(nu^2*(dx(EtaT)*dx(tt)+dy(EtaT)*dy(tt))
+				+ EtaT*tt
+				+ 2*s*sqrt(dx(Theta)^2+dy(Theta)^2)*EtaT*tt)
+	- int2d(KWCh)(tt);
+EtaT = min(max(EtaT, 0.), 1.); [Eta,Theta] = [EtaT,Theta];
+
+varf Res([dEta,dTheta],[v,w]) =
+  int2d(KWCh)((Eta-EtaOld)*v/dt
+    + nu^2*grdot(Eta,v)
+    + (s*gp(Eta)*grnorm + fp(Eta))*v
+    + (1/dt)*(Theta-ThetaOld)*w
+    + (eps2 + s*g(Eta)*tanhgam)*grdot(Theta,w)
+  )
+  + on(1,2,3,4, dTheta=0);
+
+varf Jac([dEta,dTheta],[v,w]) =
+  int2d(KWCh)(
+      (1/dt)*dEta*v
+    + nu^2*grdot(dEta,v)
+    + (2*s*grnorm + 1)*dEta*v          // eta-eta
+    + s*gp(Eta)*grdot(Theta,dTheta)*tanhgam*v                  // eta-theta
+    + s*gp(Eta)*dEta*grdot(Theta,w)*tanhgam                    // theta-eta
+    + (1/dt)*dTheta*w                       // theta-theta
+    + (eps2 + s*g(Eta)*tanhgam)*grdot(dTheta,w)
+    - s*g(Eta)*grdot(Theta,dTheta)*grdot(Theta,w)*(sechgam-tanhgam)/(grnorm^2)
+  )
+  + on(1,2,3,4, dTheta=0);
+
+for( int i=0; i < steps; i++){
+EtaOld[] = Eta[];
+
+for( int j=0; j < MaxNewton; j++){
+    matrix J = Jac(Fields, Fields, solver=sparsesolver);
+    real[int] r = Res(0, Fields);
+    r = -r;
+    dEta[] = J^-1 * r;
+    Eta[] += dEta[];
+	
+//	EtaT = Eta; EtaT = min(max(EtaT, 0.), 1.); [Eta,Theta] = [EtaT,Theta];
+
+    real AbsErr = dEta[].linfty;
+	real RelErr = AbsErr / Eta[].linfty;
+	if (AbsErr < AbsNewtTol || RelErr < RelNewtTol){ cout << "Newton took " << j << " steps" << endl; break;}
+}
+
+//KWCh = adaptmesh(KWCh, Theta, err = 0.2, hmin=nu/3.);
+[Eta,Theta]       = [Eta,Theta];
+[dEta,dTheta]     = [dEta,dTheta];
+[EtaOld,ThetaOld] = [EtaOld,ThetaOld];
+[v,w]             = [v,w];
+EtaT = EtaT;
+
+if(i<10) filenum = "00" + i;
+else if (i<100) filenum = "0"+i;
+else filenum = i;
+savevtk("KWCSimple"+filenum+".vtk", KWCh, Theta, Eta, dTheta, dEta,
+		dataname="Orientation Order OriStep OrdStep", order=vtkorder);
+real Fen = int2d(KWCh)(0.5*(1.-Eta)^2 + 0.5*nu^2*(dx(Eta)^2+dy(Eta)^2)
+           + s*g(Eta)*lcosh + 0.5*eps2*(dx(Theta)^2+dy(Theta)^2));
+cout << i << " F=" << Fen << endl;
+
+}
+
+// No Init in Eta
+
+//for( int i=0; i < steps; i++){
+
+//for( int j=0; j < MaxNewton; j++){
+
+//varf Res
+
+//varf Jac
+
+
+//}
+//NKWCh = adaptmesh(NKWCh, NEta, err = 0.1);
+
+//if(i<10) filenum = "00" + i;
+//else if (i<100) filenum = "0"+i;
+//else filenum = i;
+//savevtk("KWCSimpleNoInit"+filenum+".vtk", NKWCh, NTheta, NEta,
+//		dataname="Orientation Order", order=vtkorder);
+//}

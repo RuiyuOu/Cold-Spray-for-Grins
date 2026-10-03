@@ -1,0 +1,40 @@
+load "gmsh"
+load "iovtk"
+
+real t = 5; int Steps = 1000; real dt = t/Steps;
+real nu = 0.01; real s = 1.0;
+int[int] vtkorder2 = [1,1];
+
+// ----------- Initialization ----------------
+// --- Read Mesh ---
+mesh Twoh = gmshload("grains2d_fixed.msh");
+Twoh = adaptmesh(Twoh, 1/50., IsMetric=true);
+int maxRegion;
+for (int k = 0; k < Twoh.nt; ++k)
+    maxRegion = max(maxRegion, Twoh[k].region);
+int n = maxRegion;
+real[int] theta(n);
+{
+    ifstream f("grains2d_theta_rad.txt");
+    for (int i = 0; i < n; i++) f >> theta(i);
+}
+
+// --- Build Appropriately Coarse/Fine Mesh ---
+fespace InitH(Twoh, P0);
+InitH theta0;
+for (int k = 0; k < Twoh.nt; k++) theta0[][k] = theta(Twoh[k].region - 1);
+
+fespace OriH(Twoh,P1);
+OriH Eta=1, dEta, Theta=theta0, dTheta;
+
+Twoh = adaptmesh(Twoh, Theta, err = 0.05, hmin=0.01);
+
+// --- Init Eta Variable ---
+solve InitSEta(Eta,dEta) = 
+	int2d(Twoh)(nu^2*(dx(Eta)*dx(dEta)+dy(Eta)*dy(dEta))
+				+ Eta*dEta
+				+ 2*s*sqrt(dx(Theta)^2+dy(Theta)^2)*Eta*dEta)
+	- int2d(Twoh)(dEta);
+Eta = (Eta > 1.0) ? 1.0 : Eta; Eta = (Eta < 0.0) ? 0.0 : Eta;
+
+// ----------- Dynamics ---------------- 

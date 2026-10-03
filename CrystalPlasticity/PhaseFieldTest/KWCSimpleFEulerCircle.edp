@@ -1,0 +1,74 @@
+load "iovtk"
+
+real nu = 2e-2; real s = 2e-1; // Original KWC
+string filenum; int[int] vtkorder = [1,1,1,1];
+real gamma = 1e3;
+
+// --- Build Mesh ---
+int ns = 100;
+
+border C(t=0,2*pi){ x=cos(t); y=sin(t); }
+mesh KWCh = buildmesh(C(ns));
+KWCh = change(KWCh,fregion = (x^2+y^2 < 4e-1) ? 1 : 2);
+//KWCh = adaptmesh(KWCh, 3e-2, IsMetric=1);
+real delta = 1e-9;                 // large, so D = s/delta ~ 2
+real eps2  = 1e-2;
+real Dmax  = max(nu^2, eps2 + s/delta);
+real hmesh = KWCh.hmin;                // 1.2/30; use the actual mesh size
+//real dt    = 0.1*hmesh^2/Dmax;    // ~ 8e-5
+real dt = 0.005;
+int  steps = 10/dt;
+
+fespace InitField(KWCh, P0); 
+InitField Theta0 = (region == 1) ? pi/3 : -pi/3;
+
+fespace Fields(KWCh, [P1,P1]);
+Fields [Eta,Theta]=[1,Theta0], [dEta,dTheta], [EtaOld,ThetaOld], [v,w];
+// KWCh = adaptmesh(KWCh, Theta, err = 0.2, hmin=nu/3.); [Eta,Theta]=[1,Theta0];
+
+macro fp(p)  (p - 1) // f'(phi),  f = 0.5*(1-phi)^2
+macro g(p)   (p*p) // g(phi) = phi^2
+macro gp(p)  (2.*p) //
+
+macro grnorm() (sqrt(dx(Theta)^2 + dy(Theta)^2 + delta^2)) // grad norm of Theta
+macro chigam(gradtheta) (tanh(gamma*gradtheta)/grnorm) // smooth approximation of 1/grnorm
+macro grdot(a,b) (dx(a)*dx(b) + dy(a)*dy(b)) // grad a dot Test Func
+
+varf Mass([dEta,dTheta],[v,w]) =
+  int2d(KWCh)(1*dEta*v + 1*dTheta*w)
+  + on(C, dTheta=0);
+
+
+varf Rhs([dEta,dTheta],[v,w]) =
+  int2d(KWCh)(
+      nu^2*grdot(Eta,v)
+    + (s*gp(Eta)*grnorm + fp(Eta))*v
+    + (eps2 + s*g(Eta)*chigam(grnorm))*grdot(Theta,w))
+  + on(C, dTheta=0);
+
+// Init in Eta
+fespace Transfer(KWCh,P1); Transfer EtaT, tt; 
+solve InitEta(EtaT,tt) = 
+	int2d(KWCh)(nu^2*(dx(EtaT)*dx(tt)+dy(EtaT)*dy(tt))
+				+ EtaT*tt
+				+ 2*s*sqrt(dx(Theta)^2+dy(Theta)^2)*EtaT*tt)
+	- int2d(KWCh)(tt);
+EtaT = min(max(EtaT, 0.), 1.); [Eta,Theta] = [EtaT,Theta];
+
+for (int i = 0; i < steps; i++) {
+	matrix M = Mass(Fields, Fields, solver=sparsesolver);
+	set(M, solver=sparsesolver);
+    real[int] r = Rhs(0, Fields);
+    dEta[] = M^-1 * r;
+    Eta[] += -dt*dEta[];
+
+if(i<10) filenum = "00" + i;
+else if (i<100) filenum = "0"+i;
+else filenum = i;
+savevtk("KWCSimpleFEulerCirc"+filenum+".vtk", KWCh, Theta, Eta, dTheta, dEta,
+		dataname="Orientation Order OriStep OrdStep", order=vtkorder);
+
+real Fen = int2d(KWCh)(0.5*(1.-Eta)^2 + 0.5*nu^2*(dx(Eta)^2+dy(Eta)^2)
+           + s*g(Eta)*grnorm + 0.5*eps2*(dx(Theta)^2+dy(Theta)^2));
+cout << i << " F=" << Fen << " eta[" << Eta[].min << "," << Eta[].max << "]" << endl;
+}

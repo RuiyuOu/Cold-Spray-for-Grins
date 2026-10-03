@@ -13,30 +13,35 @@ real[int] theta(n);
     for (int i = 0; i < n; i++) f >> theta(i);
 }
 fespace InitH(Twoh, P0);
-InitH theta0, eta0;
+InitH theta0;
 for (int k = 0; k < Twoh.nt; k++) theta0[][k] = theta(Twoh[k].region - 1);
 plot(Twoh, wait=1);
 
 fespace OriH(Twoh,P1);
-OriH Eta, Theta=theta0, dEta;
+OriH Eta=1, dEta, Theta=theta0;
 
 int[int] vtkorder2 = [1,1];
-savevtk("InitBefore.vtk", Twoh, Theta, Eta, dataname="Orientation Alignment", order=vtkorder2);
+savevtk("..//PhaseFieldTest//results//InitBefore.vtk", Twoh, Theta, Eta, dataname="Orientation Alignment", order=vtkorder2);
 
 Twoh = adaptmesh(Twoh, Theta, err = 0.05, hmin=0.01);
 //Theta = theta0;
 plot(Twoh, wait=true);
 
-// ---- Eta misorientation initialization strategies ---- 
-
-// Init Eta with the following: depending on local grain misorientation. 
-// Formula: exp[ -( Norm(Misorientation) / RefMisorientation )^p ]
-// So if no misorientation locally = 1. A lot (near/at grain boundary): 0. 
-// If 2 grains are more aligned, then the grain boundary should be more aligned.
-real p = 2;
-real RefMisori = 100;
-Eta = exp(-1*( sqrt(dx(Theta)^2+dy(Theta)^2) / RefMisori )^p);
+// Init Eta with the following: steady state equation.
+// Formula: -nu^2*Lap(Eta) + (1+2s*Norm(GradTheta))*Eta -1 = 0
+// Homogeneous Neumann for Eta
+real nu = 0.01; real s = 1.0;
+solve InitSEta(Eta,dEta) = 
+	int2d(Twoh)(nu^2*(dx(Eta)*dx(dEta)+dy(Eta)*dy(dEta))
+				+ Eta*dEta
+				+ 2*s*sqrt(dx(Theta)^2+dy(Theta)^2)*Eta*dEta)
+	- int2d(Twoh)(dEta);
 plot(Eta,fill=true,value=true,wait=true);
-savevtk("InitGradNorm.vtk", Twoh, Theta, Eta, dataname="Orientation Alignment", order=vtkorder2);
-OriH GradNorm = sqrt(dx(Theta)^2 + dy(Theta)^2);
-plot(GradNorm, fill=true, value=true);
+savevtk("..//PhaseFieldTest//results//InitSteadyStateNoConstraint.vtk", Twoh, Theta, Eta, dataname="Orientation Alignment", order=vtkorder2);
+Eta = (Eta > 1.0) ? 1.0 : Eta; Eta = (Eta < 0.0) ? 0.0 : Eta;
+plot(Eta,fill=true,value=true,wait=true);
+savevtk("..//PhaseFieldTest//results//InitSteadyState.vtk", Twoh, Theta, Eta, dataname="Orientation Alignment", order=vtkorder2);
+
+
+//mesh Threeh = gmshload("grains3d_fixed.msh");
+//Threeh = adaptmesh(Threeh, 1/50., IsMetric=true);
