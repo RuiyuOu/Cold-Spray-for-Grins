@@ -3,11 +3,11 @@ load "iovtk"
 real nu = 1e-2; real s = 1e0; // Original KWC
 real eps2 = 2e-2; 			  // Cosserat term
 real gamma = 1e3;
-real time = 5; int steps = 100; real dt = time/steps;
+real time = 10; int steps = 100; real dt = time/steps;
 string filenum; int[int] vtkorder = [1,1,1,1];
 real delta = 1e-9; 
 int MaxNewton = 20; real NewtRelax = 1.0;
-real RelNewtTol = 1e-6; real AbsNewtTol = 1e-9;
+real RelNewtTol = 1e-3; real AbsNewtTol = 1e-3;
 
 // --- Build Mesh ---
 int nx = 30;
@@ -23,7 +23,7 @@ InitField Theta0 = (region == 1) ? 0 : ((region == 2) ? pi/3 : -pi/3);
 
 fespace Fields(KWCh, [P1,P1]);
 Fields [Eta,Theta]=[1,Theta0], [dEta,dTheta], [EtaOld,ThetaOld], [v,w];
-//KWCh = adaptmesh(KWCh, Theta, err = 0.2, hmin=nu/3.);
+KWCh = adaptmesh(KWCh, Theta, err = 0.2, hmin=nu/3.);
 plot(KWCh,wait=true);
 fespace NFields(NKWCh, [P1,P1]);
 NFields [NEta,NTheta]=[1,Theta0], [dNEta,dNTheta], [NEtaOld,NThetaOld], [nv,nw];
@@ -85,14 +85,15 @@ for( int j=0; j < MaxNewton; j++){
     dEta[] = J^-1 * r;
     Eta[] += dEta[];
 	
-//	EtaT = Eta; EtaT = min(max(EtaT, 0.), 1.); [Eta,Theta] = [EtaT,Theta];
+	EtaT = [Eta,Theta]'*[1,0]; EtaT = min(max(EtaT, 0.), 1.); [Eta,Theta] = [EtaT,Theta];
 
     real AbsErr = dEta[].linfty;
 	real RelErr = AbsErr / Eta[].linfty;
-	if (AbsErr < AbsNewtTol || RelErr < RelNewtTol){ cout << "Newton took " << j << " steps" << endl; break;}
+	cout << "AbsErr" << AbsErr << " RelErr" << RelErr << endl;
+	if (AbsErr < AbsNewtTol || RelErr < RelNewtTol){cout << "Newton took " << j << " steps" << endl; break;}
 }
 
-//KWCh = adaptmesh(KWCh, Theta, err = 0.2, hmin=nu/3.);
+KWCh = adaptmesh(KWCh, Theta, err = 0.2);
 [Eta,Theta]       = [Eta,Theta];
 [dEta,dTheta]     = [dEta,dTheta];
 [EtaOld,ThetaOld] = [EtaOld,ThetaOld];

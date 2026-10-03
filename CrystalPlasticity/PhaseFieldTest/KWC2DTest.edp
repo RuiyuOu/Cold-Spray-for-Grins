@@ -1,17 +1,22 @@
 load "gmsh"
 load "iovtk"
 
-real t = 5; int Steps = 1000; real dt = t/Steps;
-real nu = 0.01; real s = 1.0;
-int[int] vtkorder2 = [1,1];
+real nu = 1e-2; real s = 1e0; // Original KWC
+real eps2 = 0e-3; 			  // Cosserat term
+real gamma = 1e3;
+real time = 10; int steps = 100; real dt = time/steps;
+string filenum; int[int] vtkorder = [1,1,1,1];
+real delta = 1e-9; 
+int MaxNewton = 20; real NewtRelax = 1.0;
+real RelNewtTol = 1e-3; real AbsNewtTol = 1e-3;
 
 // ----------- Initialization ----------------
 // --- Read Mesh ---
-mesh Twoh = gmshload("grains2d_fixed.msh");
-Twoh = adaptmesh(Twoh, 1/50., IsMetric=true);
+mesh KWC2h = gmshload("grains2d_fixed.msh");
+KWC2h = adaptmesh(KWC2h, 1/50., IsMetric=true);
 int maxRegion;
-for (int k = 0; k < Twoh.nt; ++k)
-    maxRegion = max(maxRegion, Twoh[k].region);
+for (int k = 0; k < KWC2h.nt; ++k)
+    maxRegion = max(maxRegion, KWC2h[k].region);
 int n = maxRegion;
 real[int] theta(n);
 {
@@ -20,21 +25,92 @@ real[int] theta(n);
 }
 
 // --- Build Appropriately Coarse/Fine Mesh ---
-fespace InitH(Twoh, P0);
-InitH theta0;
-for (int k = 0; k < Twoh.nt; k++) theta0[][k] = theta(Twoh[k].region - 1);
+fespace InitH(KWC2h, P0);
+InitH Theta0;
+for (int k = 0; k < KWC2h.nt; k++) Theta0[][k] = theta(KWC2h[k].region - 1);
 
-fespace OriH(Twoh,P1);
-OriH Eta=1, dEta, Theta=theta0, dTheta;
+fespace Fields(KWC2h, [P1,P1]);
+Fields [Eta,Theta]=[1,Theta0], [dEta,dTheta], [EtaOld,ThetaOld], [v,w];
 
-Twoh = adaptmesh(Twoh, Theta, err = 0.05, hmin=0.01);
+KWC2h = adaptmesh(KWC2h, Theta, err = 0.05, hmin=0.01);
 
 // --- Init Eta Variable ---
-solve InitSEta(Eta,dEta) = 
-	int2d(Twoh)(nu^2*(dx(Eta)*dx(dEta)+dy(Eta)*dy(dEta))
-				+ Eta*dEta
-				+ 2*s*sqrt(dx(Theta)^2+dy(Theta)^2)*Eta*dEta)
-	- int2d(Twoh)(dEta);
-Eta = (Eta > 1.0) ? 1.0 : Eta; Eta = (Eta < 0.0) ? 0.0 : Eta;
+fespace Transfer(KWC2h,P1); Transfer EtaT, tt; 
+solve InitEta(EtaT,tt) = 
+	int2d(KWC2h)(nu^2*(dx(EtaT)*dx(tt)+dy(EtaT)*dy(tt))
+				+ EtaT*tt
+				+ 2*s*sqrt(dx(Theta)^2+dy(Theta)^2)*EtaT*tt)
+	- int2d(KWC2h)(tt);
+EtaT = min(max(EtaT, 0.), 1.); [Eta,Theta] = [EtaT,Theta];
+
+// --- Macros ---
+// p is for prime - derivative 
+macro fp(p)  (p - 1) // f'(phi),  f = 0.5*(1-phi)^2
+macro g(p)   (p*p) // g(phi) = phi^2
+macro gp(p)  (2.*p) //
+
+macro grnorm() (sqrt(dx(Theta)^2 + dy(Theta)^2 + delta^2)) // grad norm of Theta
+macro tanhgam() (tanh(gamma*grnorm)/grnorm) // smooth approximation of 1/grnorm
+macro sech2(x) (4.*exp(-2.*(x))/(1. + exp(-2.*(x)))^2) //
+macro sechgam() (gamma*sech2(gamma*grnorm)) // sech^2 term from smooth approximation
+macro grdot(a,b) (dx(a)*dx(b) + dy(a)*dy(b)) // grad a dot Test Func
+macro lcosh() ((gamma*grnorm+log(1.+ exp(-2.*gamma*grnorm))-log(2.))/gamma)//
 
 // ----------- Dynamics ---------------- 
+varf Res([dEta,dTheta],[v,w]) =
+  int2d(KWC2h)((Eta-EtaOld)*v/dt
+    + nu^2*grdot(Eta,v)
+    + (s*gp(Eta)*lcosh + fp(Eta))*v
+    + (1/dt)*(Theta-ThetaOld)*w
+    + (eps2 + s*g(Eta)*tanhgam)*grdot(Theta,w)
+  );
+  //+ on(1,2,3,4, dTheta=0);
+
+varf Jac([dEta,dTheta],[v,w]) =
+  int2d(KWC2h)(
+      (1/dt)*dEta*v
+    + nu^2*grdot(dEta,v)
+    + (2.*s*lcosh + 1.)*dEta*v          // eta-eta
+    + s*gp(Eta)*grdot(Theta,dTheta)*tanhgam*v                  // eta-theta
+    + s*gp(Eta)*dEta*grdot(Theta,w)*tanhgam                    // theta-eta
+    + (1/dt)*dTheta*w                       // theta-theta
+    + (eps2 + s*g(Eta)*tanhgam)*grdot(dTheta,w)
+    - s*g(Eta)*grdot(Theta,dTheta)*grdot(Theta,w)*(sechgam-tanhgam)/(grnorm^2)
+  );
+  //+ on(1,2,3,4, dTheta=0);
+
+for( int i=0; i < steps; i++){
+EtaOld[] = Eta[];
+
+for( int j=0; j < MaxNewton; j++){
+    matrix J = Jac(Fields, Fields, solver=sparsesolver);
+    real[int] r = Res(0, Fields);
+    r = -r;
+    dEta[] = J^-1 * r;
+    Eta[] += dEta[];
+	
+	EtaT = [Eta,Theta]'*[1,0]; EtaT = min(max(EtaT, 0.), 1.); [Eta,Theta] = [EtaT,Theta];
+
+    real AbsErr = sqrt(int2d(KWC2h)(dEta[]'*dEta[]));
+	real RelErr = AbsErr / Eta[].linfty;
+	cout << "AbsErr" << AbsErr << " RelErr" << RelErr << endl;
+	if (AbsErr < AbsNewtTol || RelErr < RelNewtTol){cout << "Newton took " << j << " steps" << endl; break;}
+}
+
+KWC2h = adaptmesh(KWC2h, Theta, err = 0.05, hmin=0.01);
+[Eta,Theta]       = [Eta,Theta];
+[dEta,dTheta]     = [dEta,dTheta];
+[EtaOld,ThetaOld] = [EtaOld,ThetaOld];
+[v,w]             = [v,w];
+EtaT = EtaT;
+
+if(i<10) filenum = "00" + i;
+else if (i<100) filenum = "0"+i;
+else filenum = i;
+savevtk("KWC2D"+filenum+".vtk", KWC2h, Theta, Eta, dTheta, dEta,
+		dataname="Orientation Order OriStep OrdStep", order=vtkorder);
+real Fen = int2d(KWC2h)(0.5*(1.-Eta)^2 + 0.5*nu^2*(dx(Eta)^2+dy(Eta)^2)
+           + s*g(Eta)*lcosh + 0.5*eps2*(dx(Theta)^2+dy(Theta)^2));
+cout << i << " F=" << Fen << endl;
+
+}
