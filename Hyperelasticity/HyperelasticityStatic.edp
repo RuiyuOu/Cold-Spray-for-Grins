@@ -5,3 +5,31 @@ LoadDynamicState	= false;
 LoadStaticState		= false;
 include "HyperelasticityGeometry.idp"
 include "HyperelasticityMacrosFunctions.idp"
+
+real BisectLow  = min(0,SearchInit);
+real BisectHigh = max(0,SearchInit);
+real Residue;
+
+// Secant search
+if( StaticNewton ){ 
+	
+}
+
+// Bisection search
+else{
+BisectSolve(BisectHigh)
+if( abs(Residue) < SearchErr ){
+cout << "Bisection converged on the input boundary. Error: " << abs(Residue) << endl; 
+break;}
+for( int i = 0; i < SearchMaxIter; i++){
+BisectSolve((BisectHigh-BisectLow)/2)
+
+if( abs(Residue) < SearchErr ){
+cout << "Bisection converged in " << i << " steps. Error: " << abs(Residue) << endl; 
+break;}
+
+UpdateBisect(Residue)
+}
+}
+
+// Save data

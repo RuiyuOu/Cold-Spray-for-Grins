@@ -9,15 +9,9 @@ real Ly = 3e-3;		int ny 	= 20;
 real Lz = 10e-3;	int nz 	= 40;
 mesh3 Th = cube(nx, ny, nz, [Lx*x, Ly*y, Lz*z]);
 
-fespace Tens2 	(Th, [P1,P1,P1,P1,P1,P1,P1,P1,P1]);
-fespace Vec 	(Th, [P1,P1,P1]);
-fespace Sca 	(Th, P1);
-
-Tens2 	[F11,F12,F13,F21,F22,F23,F31,F32,F33];	// Deformation Gradient
-Tens2 	[C11,C12,C13,C21,C22,C23,C31,C32,C33];	// Left Cauchy-Green
-Tens2 	[P11,P12,P13,P21,P22,P23,P31,P32,P33]; 	// Piola-Kirchoff 1
-Tens2 	[S11,S12,S13,S21,S22,S23,S31,S32,S33];	// Piola-Kirchoff 2 (SVK?)
-Tens2 	[V11,V12,V13,V21,V22,V23,V31,V32,V33];	// Tensor Test Function
+// Taylor-Hood
+fespace Vec 	(Th, [P2,P2,P2]);	// Vector field.
+fespace Sca 	(Th, P1);			// Scalar field.
 
 Vec 	[X,Y,Z], [VX,VY,VZ], [AX,AY,AZ];  // Position, Velocity, Acceleration
 Vec		[V1,V2,V3];  // Vector Test Function

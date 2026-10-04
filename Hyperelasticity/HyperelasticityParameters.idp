@@ -1,14 +1,17 @@
 // ------ Material Parameters ------
+real rho	= 1.050e3;	// kg/m^3	- Material density
 real c 		= 7.64e3; 	// Pa 		- NeoHookean parameter
 real k1 	= 996.6e3;	// Pa 		- Fiber stress parameter
 real k2 	= 524.6; 	// 1  		- Fiber stiffness parameter
 real kappa	= 0.;		// 1 		- Fiber dispersion parameter
-real rho	= 1.050e3;	// kg/m^3	- Material density
+real gamma 	= 30/180*pi;// 1 [rad]	- Fiber orientation 
+
 
 // ------ Static Sim Parameters ------
 bool StaticNewton 	= 0;	// Bool	- True: Newton. False: Bisection.
-real BisectBound	= 10e-3;// m 	- Initial bisection bound. 
-
+real SearchInit		= 10e-3;// m 	- Initial search location for Newton-Raphson. Initial bound for bisection (0,SearchInit).
+int  SearchMaxIter	= 20;	// 1 	- Max iteration for search. For both Newton-Raphson and bisection.
+real SearchErr 		= 1e-6;	// N 	- 
 // ------ Dynamic Sim Parameters ------
 bool LoadDynamicState	= false; 			// Bool	- True: Load saved dynamic state.
 bool LoadStaticState 	= !LoadDynamicState;// Bool - True: Load saved static state.

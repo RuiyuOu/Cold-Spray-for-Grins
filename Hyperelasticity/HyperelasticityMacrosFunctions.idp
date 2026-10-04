@@ -1,6 +1,8 @@
 // ------ Macros ------
+macro FrobeniusNorm(Tensor) (sqrt(Tensor'*Tensor)) // /T:T
+macro VectorL2Norm(Vector) 	(sqrt(Vector'*Vector)) // /v.v
 
-// ------ Static Functions ------
+// ------ Static Functions & Macros ------
 func real TargetStressResidual() 
 { real Res; real[int] TotalPK2; 
 
@@ -10,8 +12,18 @@ func matrix StaticJac
 
 func real[int] StaticRes
 
+macro BisectSolve(Val){
+./ Newton Solve with Dirichlet = Val  
+Residue = 
+} //
 
-// ------ Dynamic Functions ------
+macro UpdateBisect(Val) {
+real Mid = (BisectHigh - BisectLow)/2;
+if( Val < 0 ) BisectLow = Mid;
+else BisectHigh = Mid;
+} //
+
+// ------ Dynamic Functions & Macros ------
 func matrix DynamicJac
 
 func real[int] DynamicRes
