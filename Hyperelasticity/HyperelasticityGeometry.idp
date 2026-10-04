@@ -1,0 +1,21 @@
+load "msh3" 
+
+bool LoadSavedState = 0;
+
+// if( LoadSavedState )
+// Try: load saved mesh and field data from files
+// Catch: files don't exist. Default to everything below
+
+real Lx = 0.5e-3;
+real Ly = 3e-3;
+real Lz = 10e-3;
+
+int nx = 5;
+int ny = 30;
+int nz = 100;
+
+mesh3 Th = cube(nx, ny, nz, [Lx*x, Ly*y, Lz*z]);
+
+fespace Tens2 (Th, [P1,P1,P1,P1,P1,P1,P1,P1,P1]);
+fespace Vec (Th, [P1,P1,P1]);
+fespace Sca (Th, P1);

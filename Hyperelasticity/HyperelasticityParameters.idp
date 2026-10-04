@@ -1,0 +1,7 @@
+// --- Material Parameters ---
+real c 	= 7.64e3; 	// Pa 	- NeoHookean parameter
+real k1 = 996.6e3;	// Pa 	- Fiber stress parameter
+real k2 = 524.6; 	// 1  	- Fiber stiffness parameter
+real k 	= 0.;		// 1 	- Fiber dispersion parameter
+
+// --------- Macros ----------
