@@ -1,7 +1,14 @@
-// --- Material Parameters ---
-real c 	= 7.64e3; 	// Pa 	- NeoHookean parameter
-real k1 = 996.6e3;	// Pa 	- Fiber stress parameter
-real k2 = 524.6; 	// 1  	- Fiber stiffness parameter
-real k 	= 0.;		// 1 	- Fiber dispersion parameter
+// ------ Material Parameters ------
+real c 		= 7.64e3; 	// Pa 		- NeoHookean parameter
+real k1 	= 996.6e3;	// Pa 		- Fiber stress parameter
+real k2 	= 524.6; 	// 1  		- Fiber stiffness parameter
+real kappa	= 0.;		// 1 		- Fiber dispersion parameter
+real rho	= 1.050e3;	// kg/m^3	- Material density
 
-// --------- Macros ----------
+// ------ Static Sim Parameters ------
+bool StaticNewton 	= 0;	// Bool	- True: Newton. False: Bisection.
+real BisectBound	= 10e-3;// m 	- Initial bisection bound. 
+
+// ------ Dynamic Sim Parameters ------
+bool LoadDynamicState	= false; 			// Bool	- True: Load saved dynamic state.
+bool LoadStaticState 	= !LoadDynamicState;// Bool - True: Load saved static state.

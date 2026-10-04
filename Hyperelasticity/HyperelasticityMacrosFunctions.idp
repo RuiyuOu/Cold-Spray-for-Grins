@@ -1,0 +1,17 @@
+// ------ Macros ------
+
+// ------ Static Functions ------
+func real TargetStressResidual() 
+{ real Res; real[int] TotalPK2; 
+
+return Res;}
+
+func matrix StaticJac
+
+func real[int] StaticRes
+
+
+// ------ Dynamic Functions ------
+func matrix DynamicJac
+
+func real[int] DynamicRes

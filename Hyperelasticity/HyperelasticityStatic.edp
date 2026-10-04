@@ -1,2 +1,7 @@
 load "iovtk" 
 
+include "HyperelasticityParameters.idp"
+LoadDynamicState	= false;
+LoadStaticState		= false;
+include "HyperelasticityGeometry.idp"
+include "HyperelasticityMacrosFunctions.idp"
