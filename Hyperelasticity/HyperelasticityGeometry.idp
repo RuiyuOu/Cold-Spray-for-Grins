@@ -8,13 +8,11 @@ real Lx = 0.5e-3; 	int nx 	= 4;
 real Ly = 3e-3;		int ny 	= 20;
 real Lz = 10e-3;	int nz 	= 40;
 mesh3 Th = cube(nx, ny, nz, [Lx*x, Ly*y, Lz*z]);
+cout << "Number of tetrahedrons = " << Th.nt << endl;
 
 // Taylor-Hood
-fespace Vec 	(Th, [P2,P2,P2]);	// Vector field.
-fespace Sca 	(Th, P1);			// Scalar field.
+fespace Vec 	(Th, [P2,P2,P2,P1]);	// Vector field.
 
-Vec 	[X,Y,Z], [VX,VY,VZ], [AX,AY,AZ];  // Position, Velocity, Acceleration
-Vec		[V1,V2,V3];  // Vector Test Function
-
-Sca 	Psi, J; 
-Sca 	V;  // Scalar Test Function
+Vec 	[X,Y,Z,p];  	// Position 
+Vec		[dX,dY,dZ,dp]; 	// Position increments for Newton-Raphson
+Vec		[V1,V2,V3,V4];  // Vector Test Function

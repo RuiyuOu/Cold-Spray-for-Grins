@@ -1,35 +1,70 @@
 load "iovtk" 
 
 include "HyperelasticityParameters.idp"
-LoadDynamicState	= false;
-LoadStaticState		= false;
+LoadDyn	= false;
+LoadSta	= false;
 include "HyperelasticityGeometry.idp"
-include "HyperelasticityMacrosFunctions.idp"
+include "HyperelasticityMacros.idp"
+include "HyperelasticityStaticFunctions.idp"
 
 real BisectLow  = min(0,SearchInit);
 real BisectHigh = max(0,SearchInit);
-real Residue;
+real Residue; real ResidueOld;
 
-// Secant search
-if( StaticNewton ){ 
-	
-}
+// --- Begin Secant search ---
+if( StaticSecant ){ 
+  // --- Initial End Point Check --- 
+  // Init Secant Search Step
+  [X,Y,Z,p] = [0,0,z*SearchInit/Lz,0]; // 0 On the bottom, SearchInit at the top
+  // Search
+  SecantSolve
+  // Convergence check
+  if( abs(Residue) < SearchErr ){
+  cout << "Bisection converged in " << i << " steps. Error: " << abs(Residue) << endl; 
+  break;}
 
-// Bisection search
+  // --- Begin Secant Loop ---
+  for( int i = 0; i < SearchMaxIter; i++){
+    // Init Secant Search Step
+	UpdateSecant(Residue, ResidueOld)
+    [X,Y,Z,p] = [X,Y,z*SearchInit/Lz,p]; // Copy last state which should be closer than 0.
+    // Search
+	SecantSolve
+    // Convergence check
+    if( abs(Residue) < SearchErr ){
+    cout << "Bisection converged in " << i << " steps. Error: " << abs(Residue) << endl; 
+    break;}
+
+  } // End Secant Loop
+} // End Secant
+
+// --- Begin Bisection search ---
 else{
-BisectSolve(BisectHigh)
-if( abs(Residue) < SearchErr ){
-cout << "Bisection converged on the input boundary. Error: " << abs(Residue) << endl; 
-break;}
-for( int i = 0; i < SearchMaxIter; i++){
-BisectSolve((BisectHigh-BisectLow)/2)
+  // --- Initial End Point Check --- 
+  // Init Bisect Search Step
+  [X,Y,Z,p] = [0,0,z*SearchInit/Lz,0]; // 0 On the bottom, SearchInit at the top
+  // Search
+  BisectSolve
+  // Check convergence
+  if( abs(Residue) < SearchErr ){
+  cout << "Bisection converged on the input boundary. Error: " << abs(Residue) << endl; 
+  break;}
 
-if( abs(Residue) < SearchErr ){
-cout << "Bisection converged in " << i << " steps. Error: " << abs(Residue) << endl; 
-break;}
+  // --- Begin Bisect Loop ---
+  for( int i = 0; i < SearchMaxIter; i++){
+    // Init Bisect Search Step
+    SearchInit = (BisectHigh-BisectLow)/2;
+    [X,Y,Z,p] = [X,Y,z*SearchInit/Lz,p]; // Copy last state which should be closer than 0.
+    // Search
+    BisectSolve
+    // Convergence check
+    if( abs(Residue) < SearchErr ){
+    cout << "Bisection converged in " << i << " steps. Error: " << abs(Residue) << endl; 
+    break;}
+    // Update Bisect Bounds
+    UpdateBisect(Residue)
 
-UpdateBisect(Residue)
-}
-}
+  } // End Bisect Loop
+} // End Bisect
 
-// Save data
+// ------ Save data ------

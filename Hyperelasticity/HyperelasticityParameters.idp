@@ -1,17 +1,24 @@
 // ------ Material Parameters ------
-real rho	= 1.050e3;	// kg/m^3	- Material density
-real c 		= 7.64e3; 	// Pa 		- NeoHookean parameter
-real k1 	= 996.6e3;	// Pa 		- Fiber stress parameter
-real k2 	= 524.6; 	// 1  		- Fiber stiffness parameter
-real kappa	= 0.;		// 1 		- Fiber dispersion parameter
-real gamma 	= 30/180*pi;// 1 [rad]	- Fiber orientation 
-
+real rho	= 1.050e3;		// kg/m^3	- Material density
+real c 		= 7.64e3; 		// Pa 		- NeoHookean parameter
+real k1 	= 996.6e3;		// Pa 		- Fiber stress parameter
+real k2 	= 524.6; 		// 1  		- Fiber stiffness parameter
+real kappa	= 0.226;		// 1 		- Fiber dispersion parameter
+real gamma 	= 30/180*pi;	// 1 [rad]	- Fiber orientation 
 
 // ------ Static Sim Parameters ------
-bool StaticNewton 	= 0;	// Bool	- True: Newton. False: Bisection.
-real SearchInit		= 10e-3;// m 	- Initial search location for Newton-Raphson. Initial bound for bisection (0,SearchInit).
-int  SearchMaxIter	= 20;	// 1 	- Max iteration for search. For both Newton-Raphson and bisection.
-real SearchErr 		= 1e-6;	// N 	- 
+bool StaticSecant 	= 0;	// Bool	- True: Secant. False: Bisection.
+real SearchInit		= 5e-3;	// m 	- Initial search location for secant. Initial bound for bisection (0,SearchInit).
+int  SearchMaxIter	= 20;	// 1 	- Max iteration for search. For both secant and bisection.
+real SearchErr 		= 1e-6;	// N 	- Max error in residuals for search
+int  StaNewtMax		= 20; 	// 1 	- Max iteration number for Newton-Raphson
+real StaAbsErr		= 1e-6; // 1 	- Max absolute error in residuals for Newton-Raphson
+real StaRelErr		= 1e-6; // 1 	- Max relative error in residuals for Newton-Raphson
+int  StaIntOrd		= 4; 	// 1 	- Quadrature order
+
 // ------ Dynamic Sim Parameters ------
-bool LoadDynamicState	= false; 			// Bool	- True: Load saved dynamic state.
-bool LoadStaticState 	= !LoadDynamicState;// Bool - True: Load saved static state.
+bool LoadDyn	= 0;		// Bool	- True: Load saved dynamic state.
+bool LoadSta 	= !LoadDyn;	// Bool - True: Load saved static state.
+int  DynNewtMax = 20;		// 1	- Max iteration number for Newton-Raphson
+real DynAbsErr 	= 1e-6;		// 1 	- Max absolute error in residuals for Newton-Raphson
+real DynRelErr 	= 1e-6; 	// 1 	- Max relative error in residuals for Newton-Raphson
