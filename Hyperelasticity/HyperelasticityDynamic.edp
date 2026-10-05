@@ -2,4 +2,4 @@ load "iovtk"
 
 include "HyperelasticityParameters.idp"
 include "HyperelasticityGeometry.idp"
-include "HyperelasticityMacrosFunctions.idp"
+include "HyperelasticityMacros.idp"

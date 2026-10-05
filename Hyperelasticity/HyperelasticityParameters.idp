@@ -4,10 +4,11 @@ real c 		= 7.64e3; 		// Pa 		- NeoHookean parameter
 real k1 	= 996.6e3;		// Pa 		- Fiber stress parameter
 real k2 	= 524.6; 		// 1  		- Fiber stiffness parameter
 real kappa	= 0.226;		// 1 		- Fiber dispersion parameter
-real gamma 	= 30/180*pi;	// 1 [rad]	- Fiber orientation 
+real gamma 	= 49.98/180*pi;	// 1 [rad]	- Fiber orientation 
 
 // ------ Static Sim Parameters ------
 bool StaticSecant 	= 0;	// Bool	- True: Secant. False: Bisection.
+real TargetTensile	= 1; 	// N 	- Target tensile stress on material
 real SearchInit		= 5e-3;	// m 	- Initial search location for secant. Initial bound for bisection (0,SearchInit).
 int  SearchMaxIter	= 20;	// 1 	- Max iteration for search. For both secant and bisection.
 real SearchErr 		= 1e-6;	// N 	- Max error in residuals for search

@@ -1,0 +1,82 @@
+// -------------- Shared Macros --------------
+// Note: We use cofactors here to avoid any and all ill conditioned divisions
+
+// Deformation gradient: F = du/dx = I + dX/dx. 
+macro F11() (1+dx(X)) //
+macro F12() (dy(X)) //
+macro F13() (dz(X)) //
+macro F21() (dx(Y)) //
+macro F22() (1+dy(Y)) //
+macro F23() (dz(Y)) //
+macro F31() (dx(Z)) //
+macro F32() (dy(Z)) //
+macro F33() (1+dz(Z)) //
+
+// Cofactor matrix: cof F = J F^-T = dJ/dF 
+macro cof11() (F22*F33-F23*F32) //
+macro cof12() (F23*F31-F21*F33) //
+macro cof13() (F21*F32-F22*F31) //
+macro cof21() (F13*F32-F12*F33) //
+macro cof22() (F11*F33-F13*F31) //
+macro cof23() (F12*F31-F11*F32) //
+macro cof31() (F12*F23-F13*F22) //
+macro cof32() (F13*F21-F11*F23) //
+macro cof33() (F11*F22-F12*F21) //
+
+// Determinant of F: J = det F = F1i CofF1i
+macro Jdet() (F11*cof11+F12*cof12+F13*cof13) //
+
+// Inverse of F: F^-1 = CofF / J ; Note: J approx 1 here so no issue with division.
+macro Fi11() (cof11/Jdet) //
+macro Fi12() (cof21/Jdet) //
+macro Fi13() (cof31/Jdet) //
+macro Fi21() (cof12/Jdet) //
+macro Fi22() (cof22/Jdet) //
+macro Fi23() (cof32/Jdet) //
+macro Fi31() (cof13/Jdet) //
+macro Fi32() (cof23/Jdet) //
+macro Fi33() (cof33/Jdet) //
+
+// Left Cauchy-Green: C = F^T F ; Note: Only relevant parts of C, as fibers are only in yz.
+macro C11() (F11^2+F21^2+F31^2) //
+macro C22() (F12^2+F22^2+F32^2) //
+macro C33() (F13^2+F23^2+F33^2) //
+macro C23() (F12*F13+F22*F23+F32*F33) //
+
+// Fiber Orientation: (0, cos(gamma), sin(gamma))
+macro cosg() (cos(gamma)) //
+macro sing() (sin(gamma)) //
+
+// Fiber Structure Tensor: H = 1/4pi Integral rho M otimes M 
+macro H11() (kappa) //
+macro H22() (kappa+(1.-3.*kappa)*cosg^2) //
+macro H33() (kappa+(1.-3.*kappa)*sing^2) //
+macro H23(sgn) ((1.-3.*kappa)*cosg*sing*(sgn)) //
+
+// Structure Strain Invariant: Ei = Hi : C - 1
+macro Es(sgn) (H11*C11+H22*C22+H33*C33+2.*H23(sgn)*C23-1.) //
+
+// Stress Function: psi_fi' = dPsi_fi/dE
+macro dpsi(sgn) (k1*Es(sgn)*exp(k2*Es(sgn)^2)) //
+
+// Structure Tensor "Push Forward": FH = dE/dF; Note: PK1 = dPsi/dF = dPsi/dE dE/dF. 
+macro FH11(sgn) (H11*F11) //
+macro FH12(sgn) (F12*H22+F13*H23(sgn)) //
+macro FH13(sgn) (F12*H23(sgn)+F13*H33) //
+macro FH21(sgn) (H11*F21) //
+macro FH22(sgn) (F22*H22+F23*H23(sgn)) //
+macro FH23(sgn) (F22*H23(sgn)+F23*H33) //
+macro FH31(sgn) (H11*F31) //
+macro FH32(sgn) (F32*H22+F33*H23(sgn)) //
+macro FH33(sgn) (F32*H23(sgn)+F33*H33) //
+
+// First Piola-Kirchoff Stress: P = dPsi/dF 
+macro P11() (c*F11+p*cof11+2.*dpsi(1.)*FH11(1.)+2.*dpsi(-1.)*FH11(-1.)) //
+macro P12() (c*F12+p*cof12+2.*dpsi(1.)*FH12(1.)+2.*dpsi(-1.)*FH12(-1.)) //
+macro P13() (c*F13+p*cof13+2.*dpsi(1.)*FH13(1.)+2.*dpsi(-1.)*FH13(-1.)) //
+macro P21() (c*F21+p*cof21+2.*dpsi(1.)*FH21(1.)+2.*dpsi(-1.)*FH21(-1.)) //
+macro P22() (c*F22+p*cof22+2.*dpsi(1.)*FH22(1.)+2.*dpsi(-1.)*FH22(-1.)) //
+macro P23() (c*F23+p*cof23+2.*dpsi(1.)*FH23(1.)+2.*dpsi(-1.)*FH23(-1.)) //
+macro P31() (c*F31+p*cof31+2.*dpsi(1.)*FH31(1.)+2.*dpsi(-1.)*FH31(-1.)) //
+macro P32() (c*F32+p*cof32+2.*dpsi(1.)*FH32(1.)+2.*dpsi(-1.)*FH32(-1.)) //
+macro P33() (c*F33+p*cof33+2.*dpsi(1.)*FH33(1.)+2.*dpsi(-1.)*FH33(-1.)) //

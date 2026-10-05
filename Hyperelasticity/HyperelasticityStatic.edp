@@ -1,40 +1,48 @@
 load "iovtk" 
+load "C//ColdSprayForGrins//Hyperelasticity//goh_plugin.cpp"
 
 include "HyperelasticityParameters.idp"
-LoadDyn	= false;
-LoadSta	= false;
+//LoadDyn	= false;
+//LoadSta	= false;
 include "HyperelasticityGeometry.idp"
 include "HyperelasticityMacros.idp"
 include "HyperelasticityStaticFunctions.idp"
 
-real BisectLow  = min(0,SearchInit);
-real BisectHigh = max(0,SearchInit);
-real Residue; real ResidueOld;
+gohSetParams(c,k1,k2,kappa,gamma)
+
+real SearchLow  = min(0.,SearchInit);
+real SearchHigh = max(0.,SearchInit);
+real Residue; real ResidueLow = 0; real ResidueHigh;
 
 // --- Begin Secant search ---
 if( StaticSecant ){ 
   // --- Initial End Point Check --- 
   // Init Secant Search Step
-  [X,Y,Z,p] = [0,0,z*SearchInit/Lz,0]; // 0 On the bottom, SearchInit at the top
-  // Search
-  SecantSolve
+  [X,Y,Z,p] = [0,0,z*SearchInit/Lz,-c]; // 0 On the bottom, SearchInit at the top
+  // Solve physics
+  StaticSolve
+  // Solve residue
+  StaticResidue
   // Convergence check
   if( abs(Residue) < SearchErr ){
-  cout << "Bisection converged in " << i << " steps. Error: " << abs(Residue) << endl; 
-  break;}
+  cout << "Secant converged on the input boundary. Error: " << abs(Residue) << endl;}
 
   // --- Begin Secant Loop ---
+  else{
+  SearchInit = SearchHigh - ResidueHigh*(SearchHigh-SearchLow)/(ResidueHigh-ResidueLow);
   for( int i = 0; i < SearchMaxIter; i++){
     // Init Secant Search Step
-	UpdateSecant(Residue, ResidueOld)
     [X,Y,Z,p] = [X,Y,z*SearchInit/Lz,p]; // Copy last state which should be closer than 0.
-    // Search
-	SecantSolve
+    // Solve physics
+	StaticSolve
+    // Solve residue
+    StaticResidue
     // Convergence check
     if( abs(Residue) < SearchErr ){
-    cout << "Bisection converged in " << i << " steps. Error: " << abs(Residue) << endl; 
+    cout << "Secant converged in " << i << " steps. Error: " << abs(Residue) << endl; 
     break;}
-
+    UpdateSecant
+  } // End For
   } // End Secant Loop
 } // End Secant
 
@@ -42,29 +50,40 @@ if( StaticSecant ){
 else{
   // --- Initial End Point Check --- 
   // Init Bisect Search Step
-  [X,Y,Z,p] = [0,0,z*SearchInit/Lz,0]; // 0 On the bottom, SearchInit at the top
-  // Search
-  BisectSolve
+  [X,Y,Z,p] = [0,0,z*SearchInit/Lz,-c]; // 0 On the bottom, SearchInit at the top
+  // Solve physics
+  StaticSolve
+  // Solve residue
+  StaticResidue
   // Check convergence
   if( abs(Residue) < SearchErr ){
-  cout << "Bisection converged on the input boundary. Error: " << abs(Residue) << endl; 
-  break;}
+  cout << "Bisection converged on the input boundary. Error: " << abs(Residue) << endl;}
 
   // --- Begin Bisect Loop ---
+  else{
+  SearchInit = (SearchHigh-SearchLow)/2;
   for( int i = 0; i < SearchMaxIter; i++){
     // Init Bisect Search Step
-    SearchInit = (BisectHigh-BisectLow)/2;
     [X,Y,Z,p] = [X,Y,z*SearchInit/Lz,p]; // Copy last state which should be closer than 0.
     // Search
-    BisectSolve
+    StaticSolve
+    // Solve residue
+    StaticResidue
     // Convergence check
     if( abs(Residue) < SearchErr ){
     cout << "Bisection converged in " << i << " steps. Error: " << abs(Residue) << endl; 
     break;}
     // Update Bisect Bounds
-    UpdateBisect(Residue)
-
+    UpdateBisect
+  } // End For
   } // End Bisect Loop
 } // End Bisect
 
 // ------ Save data ------
+real T = int2d(Th,6)(P33);
+real uzmean = int2d(Th,6)(Z)/int2d(Th,6)(1.);
+fespace P0h(Th,P0);
+P0h jerr = abs(Jdet-1.);
+cout << "   >> U(z=Lz) = " << uzmean << "  T = " << T << " N   max|J-1| = " << jerr[].linfty << endl;
+Th = movemesh(Th,[x+X,y+Y,z+Z]);
+plot(Th);
