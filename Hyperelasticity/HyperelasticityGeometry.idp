@@ -4,9 +4,9 @@ load "msh3"
 // Try: load saved mesh and field data from files
 // Catch: files don't exist. Default to everything below
 
-real Lx = 0.5e-3; 	int nx 	= 4;
-real Ly = 3e-3;		int ny 	= 20;
-real Lz = 10e-3;	int nz 	= 40;
+real Lx = 0.5e-3; 	int nx 	= 2;
+real Ly = 3e-3;		int ny 	= 5;
+real Lz = 10e-3;	int nz 	= 10;
 mesh3 Th = cube(nx, ny, nz, [Lx*x, Ly*y, Lz*z]);
 cout << "Number of tetrahedrons = " << Th.nt << endl;
 

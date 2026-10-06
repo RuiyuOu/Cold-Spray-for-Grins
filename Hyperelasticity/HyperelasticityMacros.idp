@@ -56,7 +56,7 @@ macro H23(sgn) ((1.-3.*kappa)*cosg*sing*(sgn)) //
 // Structure Strain Invariant: Ei = Hi : C - 1
 macro Es(sgn) (H11*C11+H22*C22+H33*C33+2.*H23(sgn)*C23-1.) //
 
-// Stress Function: psi_fi' = dPsi_fi/dE
+// Stress Function 1: psi_fi' = dPsi_fi/dE
 macro dpsi(sgn) (k1*Es(sgn)*exp(k2*Es(sgn)^2)) //
 
 // Structure Tensor "Push Forward": FH = dE/dF; Note: PK1 = dPsi/dF = dPsi/dE dE/dF. 
@@ -80,3 +80,65 @@ macro P23() (c*F23+p*cof23+2.*dpsi(1.)*FH23(1.)+2.*dpsi(-1.)*FH23(-1.)) //
 macro P31() (c*F31+p*cof31+2.*dpsi(1.)*FH31(1.)+2.*dpsi(-1.)*FH31(-1.)) //
 macro P32() (c*F32+p*cof32+2.*dpsi(1.)*FH32(1.)+2.*dpsi(-1.)*FH32(-1.)) //
 macro P33() (c*F33+p*cof33+2.*dpsi(1.)*FH33(1.)+2.*dpsi(-1.)*FH33(-1.)) //
+
+// -------------- Jacobian & Residual Build Macros --------------
+// Stress Function 1: psi_fi'' = d^2Psi_fi/dE^2
+macro d2psi(sgn) (k1*(1.+2.*k2*Es(sgn)^2)*exp(k2*Es(sgn)^2)) //
+
+// Standard Components: G := Grad dX & W := Grad V 
+macro G11() (dx(dX)) //
+macro W11() (dx(V1)) //
+macro G12() (dy(dX)) //
+macro W12() (dy(V1)) //
+macro G13() (dz(dX)) //
+macro W13() (dz(V1)) //
+macro G21() (dx(dY)) //
+macro W21() (dx(V2)) //
+macro G22() (dy(dY)) //
+macro W22() (dy(V2)) //
+macro G23() (dz(dY)) //
+macro W23() (dz(V2)) //
+macro G31() (dx(dZ)) //
+macro W31() (dx(V3)) //
+macro G32() (dy(dZ)) //
+macro W32() (dy(V3)) //
+macro G33() (dz(dZ)) //
+macro W33() (dz(V3)) //
+
+// cofG := cofF : G & cofW := cofF : W
+macro cofG() (cof11*G11+cof12*G12+cof13*G13+cof21*G21+cof22*G22+cof23*G23+cof31*G31+cof32*G32+cof33*G33) //
+macro cofW() (cof11*W11+cof12*W12+cof13*W13+cof21*W21+cof22*W22+cof23*W23+cof31*W31+cof32*W32+cof33*W33) //
+
+// CG := (cofF)^T G & CW := (cofF)^T W
+macro CG11() (cof11*G11+cof21*G21+cof31*G31) //
+macro CW11() (cof11*W11+cof21*W21+cof31*W31) //
+macro CG12() (cof11*G12+cof21*G22+cof31*G32) //
+macro CW12() (cof11*W12+cof21*W22+cof31*W32) //
+macro CG13() (cof11*G13+cof21*G23+cof31*G33) //
+macro CW13() (cof11*W13+cof21*W23+cof31*W33) //
+macro CG21() (cof12*G11+cof22*G21+cof32*G31) //
+macro CW21() (cof12*W11+cof22*W21+cof32*W31) //
+macro CG22() (cof12*G12+cof22*G22+cof32*G32) //
+macro CW22() (cof12*W12+cof22*W22+cof32*W32) //
+macro CG23() (cof12*G13+cof22*G23+cof32*G33) //
+macro CW23() (cof12*W13+cof22*W23+cof32*W33) //
+macro CG31() (cof13*G11+cof23*G21+cof33*G31) //
+macro CW31() (cof13*W11+cof23*W21+cof33*W31) //
+macro CG32() (cof13*G12+cof23*G22+cof33*G32) //
+macro CW32() (cof13*W12+cof23*W22+cof33*W32) //
+macro CG33() (cof13*G13+cof23*G23+cof33*G33) //
+macro CW33() (cof13*W13+cof23*W23+cof33*W33) //
+
+// trCGCW := Tr(CG*CW)
+macro trCGCW() (CG11*CW11+CG12*CW21+CG13*CW31+CG21*CW12+CG22*CW22+CG23*CW32+CG31*CW13+CG32*CW23+CG33*CW33) //
+
+// FHG := FH : G & FHW := FH : W
+macro FHG(sgn) (FH11(sgn)*G11+FH12(sgn)*G12+FH13(sgn)*G13+FH21(sgn)*G21+FH22(sgn)*G22+FH23(sgn)*G23+FH31(sgn)*G31+FH32(sgn)*G32+FH33(sgn)*G33) //
+macro FHW(sgn) (FH11(sgn)*W11+FH12(sgn)*W12+FH13(sgn)*W13+FH21(sgn)*W21+FH22(sgn)*W22+FH23(sgn)*W23+FH31(sgn)*W31+FH32(sgn)*W32+FH33(sgn)*W33) //
+
+macro trWHG(sgn) (W11*H11*G11+W12*(H22*G12+H23(sgn)*G13)+W13*(H23(sgn)*G12+H33*G13)+W21*H11*G21+W22*(H22*G22+H23(sgn)*G23)+W23*(H23(sgn)*G22+H33*G23)+W31*H11*G31+W32*(H22*G32+H23(sgn)*G33)+W33*(H23(sgn)*G32+H33*G33)) //
+
+macro KUU() (c*(G11*W11+G12*W12+G13*W13+G21*W21+G22*W22+G23*W23+G31*W31+G32*W32+G33*W33)
+   + p/Jdet*(cofG*cofW-trCGCW)
+   + 4.*d2psi(1.)*FHW(1.)*FHG(1.) + 4.*d2psi(-1.)*FHW(-1.)*FHG(-1.)
+   + 2.*dpsi(1.)*trWHG(1.) + 2.*dpsi(-1.)*trWHG(-1.)) //

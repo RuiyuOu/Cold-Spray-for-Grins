@@ -10,10 +10,13 @@ real delta = 1e-9;
 int MaxNewton = 20; real NewtRelax = 1.0;
 real RelNewtTol = 1e-3; real AbsNewtTol = 1e-3;
 
+bool ConstraintForce = 0; real ConstraintStrength = 30;
+real CS = ConstraintForce ? ConstraintStrength : 0.;
+int AveNewt=0;
 // ----------- Initialization ----------------
 // --- Read Mesh ---
 mesh KWC2h = gmshload("grains2d_fixed.msh");
-KWC2h = adaptmesh(KWC2h, 1/50., IsMetric=true);
+//KWC2h = adaptmesh(KWC2h, 1/50., IsMetric=true);
 int maxRegion;
 for (int k = 0; k < KWC2h.nt; ++k)
     maxRegion = max(maxRegion, KWC2h[k].region);
@@ -32,17 +35,29 @@ for (int k = 0; k < KWC2h.nt; k++) Theta0[][k] = theta(KWC2h[k].region - 1);
 fespace Fields(KWC2h, [P1,P1]);
 Fields [Eta,Theta]=[1,Theta0], [dEta,dTheta], [EtaOld,ThetaOld], [v,w];
 
-KWC2h = adaptmesh(KWC2h, Theta, err = 0.05, hmin=0.01);
+//KWC2h = adaptmesh(KWC2h, Theta, err = 0.05, hmin=0.01);
 
 // --- Init Eta Variable ---
-fespace Transfer(KWC2h,P1); Transfer EtaT, tt; 
-solve InitEta(EtaT,tt) = 
+fespace Transfer(KWC2h,P1); Transfer EtaT, tt, EtaK = 1.;
+problem InitEta(EtaT,tt) = 
 	int2d(KWC2h)(nu^2*(dx(EtaT)*dx(tt)+dy(EtaT)*dy(tt))
 				+ EtaT*tt
-				+ 2*s*sqrt(dx(Theta)^2+dy(Theta)^2)*EtaT*tt)
-	- int2d(KWC2h)(tt);
-EtaT = min(max(EtaT, 0.), 1.); [Eta,Theta] = [EtaT,Theta];
-
+				+ 2*s*sqrt(dx(Theta)^2+dy(Theta)^2)*EtaT*tt
+				//+ CS*((EtaK < 0.) + (EtaK > 1.))*EtaT*tt
+				)
+  - int2d(KWC2h)(tt)
+  - int2d(KWC2h)(tt*( - CS*((EtaK > 1.) - (EtaK < 0.))))
+;
+for (int it = 0; it < 30; it++) {
+	InitEta;
+	real dAct = int2d(KWC2h)(abs((EtaT < 0.) + (EtaT > 1.) - (EtaK < 0.) - (EtaK > 1.)));
+	EtaK = EtaT;
+	if (dAct == 0.) break;      // active set unchanged -> converged
+}
+//EtaT = min(max(EtaT, 0.), 1.); 
+[Eta,Theta] = [EtaT,Theta];
+savevtk("..//PhaseFieldTest//results//KWC2DCoarseLinearConstraintForceInit.vtk", KWC2h, Theta, Eta, dTheta, dEta,
+		dataname="Orientation Order OriStep OrdStep", order=vtkorder);
 // --- Macros ---
 // p is for prime - derivative 
 macro fp(p)  (p - 1) // f'(phi),  f = 0.5*(1-phi)^2
@@ -57,10 +72,15 @@ macro grdot(a,b) (dx(a)*dx(b) + dy(a)*dy(b)) // grad a dot Test Func
 macro lcosh() ((gamma*grnorm+log(1.+ exp(-2.*gamma*grnorm))-log(2.))/gamma)//
 
 // ----------- Dynamics ---------------- 
+real kk = 200.;
+macro sg(z) (1./(1. + exp(-(z)))) //
+
 varf Res([dEta,dTheta],[v,w]) =
   int2d(KWC2h)((Eta-EtaOld)*v/dt
     + nu^2*grdot(Eta,v)
     + (s*gp(Eta)*lcosh + fp(Eta))*v
+	+ CS*(sg(kk*(Eta-1.)) - sg(-kk*Eta))*v
+	//+ CS*(min(Eta,0.) + max(Eta,1.) - 1.)*v
     + (1/dt)*(Theta-ThetaOld)*w
     + (eps2 + s*g(Eta)*tanhgam)*grdot(Theta,w)
   );
@@ -71,6 +91,8 @@ varf Jac([dEta,dTheta],[v,w]) =
       (1/dt)*dEta*v
     + nu^2*grdot(dEta,v)
     + (2.*s*lcosh + 1.)*dEta*v          // eta-eta
+	+ CS*kk*(sg(kk*(Eta-1.))*(1.-sg(kk*(Eta-1.))) + sg(-kk*Eta)*(1.-sg(-kk*Eta)))*dEta*v
+	//+ CS*((Eta < 0.) + (Eta > 1.))*dEta*v
     + s*gp(Eta)*grdot(Theta,dTheta)*tanhgam*v                  // eta-theta
     + s*gp(Eta)*dEta*grdot(Theta,w)*tanhgam                    // theta-eta
     + (1/dt)*dTheta*w                       // theta-theta
@@ -89,15 +111,16 @@ for( int j=0; j < MaxNewton; j++){
     dEta[] = J^-1 * r;
     Eta[] += dEta[];
 	
-	EtaT = [Eta,Theta]'*[1,0]; EtaT = min(max(EtaT, 0.), 1.); [Eta,Theta] = [EtaT,Theta];
+	//EtaT = [Eta,Theta]'*[1,0]; EtaT = min(max(EtaT, 0.), 1.); [Eta,Theta] = [EtaT,Theta];
 
     real AbsErr = sqrt(int2d(KWC2h)(dEta[]'*dEta[]));
 	real RelErr = AbsErr / Eta[].linfty;
 	cout << "AbsErr" << AbsErr << " RelErr" << RelErr << endl;
-	if (AbsErr < AbsNewtTol || RelErr < RelNewtTol){cout << "Newton took " << j << " steps" << endl; break;}
+	if (AbsErr < AbsNewtTol || RelErr < RelNewtTol){cout << "Newton took " << j+1 << " steps" << endl; AveNewt += j+1;break;}
+	if (j == MaxNewton-1){cout << "Newton did not converge." << endl; AveNewt+=j+1; break;}
 }
 
-KWC2h = adaptmesh(KWC2h, Theta, err = 0.05, hmin=0.01);
+//KWC2h = adaptmesh(KWC2h, Theta, err = 0.05, hmin=0.01);
 [Eta,Theta]       = [Eta,Theta];
 [dEta,dTheta]     = [dEta,dTheta];
 [EtaOld,ThetaOld] = [EtaOld,ThetaOld];
@@ -107,10 +130,12 @@ EtaT = EtaT;
 if(i<10) filenum = "00" + i;
 else if (i<100) filenum = "0"+i;
 else filenum = i;
-savevtk("KWC2D"+filenum+".vtk", KWC2h, Theta, Eta, dTheta, dEta,
+savevtk("..//PhaseFieldTest//results//KWC2DCoarseLinearConstraintForce"+filenum+".vtk", KWC2h, Theta, Eta, dTheta, dEta,
 		dataname="Orientation Order OriStep OrdStep", order=vtkorder);
 real Fen = int2d(KWC2h)(0.5*(1.-Eta)^2 + 0.5*nu^2*(dx(Eta)^2+dy(Eta)^2)
            + s*g(Eta)*lcosh + 0.5*eps2*(dx(Theta)^2+dy(Theta)^2));
 cout << i << " F=" << Fen << endl;
 
 }
+real nsteps = steps;
+cout << "Newton took on average: "<< AveNewt/nsteps <<" steps."<< endl;

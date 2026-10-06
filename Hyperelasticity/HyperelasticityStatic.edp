@@ -1,5 +1,4 @@
 load "iovtk" 
-load "C//ColdSprayForGrins//Hyperelasticity//goh_plugin.cpp"
 
 include "HyperelasticityParameters.idp"
 //LoadDyn	= false;
@@ -8,11 +7,10 @@ include "HyperelasticityGeometry.idp"
 include "HyperelasticityMacros.idp"
 include "HyperelasticityStaticFunctions.idp"
 
-gohSetParams(c,k1,k2,kappa,gamma)
-
 real SearchLow  = min(0.,SearchInit);
 real SearchHigh = max(0.,SearchInit);
 real Residue; real ResidueLow = 0; real ResidueHigh;
+real AbsErr; real RelErr;
 
 // --- Begin Secant search ---
 if( StaticSecant ){ 
@@ -29,6 +27,7 @@ if( StaticSecant ){
 
   // --- Begin Secant Loop ---
   else{
+  ResidueHigh = Residue;
   SearchInit = SearchHigh - ResidueHigh*(SearchHigh-SearchLow)/(ResidueHigh-ResidueLow);
   for( int i = 0; i < SearchMaxIter; i++){
     // Init Secant Search Step
@@ -61,7 +60,7 @@ else{
 
   // --- Begin Bisect Loop ---
   else{
-  SearchInit = (SearchHigh-SearchLow)/2;
+  SearchInit = (SearchHigh+SearchLow)/2;
   for( int i = 0; i < SearchMaxIter; i++){
     // Init Bisect Search Step
     [X,Y,Z,p] = [X,Y,z*SearchInit/Lz,p]; // Copy last state which should be closer than 0.

@@ -1,0 +1,19 @@
+load "msh3"
+
+real R  = 5.e-3;
+real Lz = 30.e-3;
+real dz0 = 0.2e-3;
+real G   = 1.28708;
+
+int NTheta = 30;
+int Nz = 15;
+
+border C(t=0,2*pi){x = R*cos(t);y = R*sin(t);label = 1;}
+mesh Th2 = buildmesh(C(NTheta));
+
+func zmap = Lz*(pow(G,Nz*z)-1.)/(pow(G,Nz)-1.);
+mesh3 Th = buildlayers(Th2,Nz,transfo = [x,y,zmap]);
+
+fespace Tens2(Th,[P1,P1,P1,P1,P1,P1,P1,P1,P1]);
+fespace Vec  (Th,[P1,P1,P1]);
+fespace Sca	 (Th,P1);

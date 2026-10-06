@@ -1,70 +1,39 @@
 // -------------- Static Functions & Macros --------------
-macro GP(i) gohP(i,F11,F12,F13,F21,F22,F23,F31,F32,F33,p) //
-macro GA(r) gohA(r,F11,F12,F13,F21,F22,F23,F31,F32,F33,p) //
-
 varf StaRes([dX,dY,dZ,dp],[V1,V2,V3,V4]) = int3d(Th,qforder=StaIntOrd)(
-    GP(0)*dx(V1) + GP(1)*dy(V1) + GP(2)*dz(V1)
-  + GP(3)*dx(V2) + GP(4)*dy(V2) + GP(5)*dz(V2)
-  + GP(6)*dx(V3) + GP(7)*dy(V3) + GP(8)*dz(V3)
-  + (Jdet-1.)*V4 
-  )
-  // BCs
+  // P : W = P : Grad Tests
+  P11*W11 + P12*W12 + P13*W13 + P21*W21 + P22*W22 + P23*W23 + P31*W31 + P32*W32 + P33*W33
+  // Pressure term (J-1)*test
+  + (Jdet-1.)*V4 )
   + on(5,6, dX=0, dY=0, dZ=0);
 
 varf StaJac([dX,dY,dZ,dp],[V1,V2,V3,V4]) = int3d(Th,qforder=StaIntOrd)(
-  // K_uu : A[9*(3*i+J)+(3*k+L)] contracted with grad Vi and grad du
-  // V1 portion
-    GA(0)*dx(V1) *dx(dX) + GA(1)*dx(V1) *dy(dX) + GA(2) *dx(V1)*dz(dX)
-  + GA(3)*dx(V1) *dx(dY) + GA(4)*dx(V1) *dy(dY) + GA(5) *dx(V1)*dz(dY)
-  + GA(6)*dx(V1) *dx(dZ) + GA(7)*dx(V1) *dy(dZ) + GA(8) *dx(V1)*dz(dZ)
-  + GA(9)*dy(V1) *dx(dX) + GA(10)*dy(V1)*dy(dX) + GA(11)*dy(V1)*dz(dX)
-  + GA(12)*dy(V1)*dx(dY) + GA(13)*dy(V1)*dy(dY) + GA(14)*dy(V1)*dz(dY)
-  + GA(15)*dy(V1)*dx(dZ) + GA(16)*dy(V1)*dy(dZ) + GA(17)*dy(V1)*dz(dZ)
-  + GA(18)*dz(V1)*dx(dX) + GA(19)*dz(V1)*dy(dX) + GA(20)*dz(V1)*dz(dX)
-  + GA(21)*dz(V1)*dx(dY) + GA(22)*dz(V1)*dy(dY) + GA(23)*dz(V1)*dz(dY)
-  + GA(24)*dz(V1)*dx(dZ) + GA(25)*dz(V1)*dy(dZ) + GA(26)*dz(V1)*dz(dZ)
-  // V2 portion
-  + GA(27)*dx(V2)*dx(dX) + GA(28)*dx(V2)*dy(dX) + GA(29)*dx(V2)*dz(dX)
-  + GA(30)*dx(V2)*dx(dY) + GA(31)*dx(V2)*dy(dY) + GA(32)*dx(V2)*dz(dY)
-  + GA(33)*dx(V2)*dx(dZ) + GA(34)*dx(V2)*dy(dZ) + GA(35)*dx(V2)*dz(dZ)
-  + GA(36)*dy(V2)*dx(dX) + GA(37)*dy(V2)*dy(dX) + GA(38)*dy(V2)*dz(dX)
-  + GA(39)*dy(V2)*dx(dY) + GA(40)*dy(V2)*dy(dY) + GA(41)*dy(V2)*dz(dY)
-  + GA(42)*dy(V2)*dx(dZ) + GA(43)*dy(V2)*dy(dZ) + GA(44)*dy(V2)*dz(dZ)
-  + GA(45)*dz(V2)*dx(dX) + GA(46)*dz(V2)*dy(dX) + GA(47)*dz(V2)*dz(dX)
-  + GA(48)*dz(V2)*dx(dY) + GA(49)*dz(V2)*dy(dY) + GA(50)*dz(V2)*dz(dY)
-  + GA(51)*dz(V2)*dx(dZ) + GA(52)*dz(V2)*dy(dZ) + GA(53)*dz(V2)*dz(dZ)
-  // V3 portion
-  + GA(54)*dx(V3)*dx(dX) + GA(55)*dx(V3)*dy(dX) + GA(56)*dx(V3)*dz(dX)
-  + GA(57)*dx(V3)*dx(dY) + GA(58)*dx(V3)*dy(dY) + GA(59)*dx(V3)*dz(dY)
-  + GA(60)*dx(V3)*dx(dZ) + GA(61)*dx(V3)*dy(dZ) + GA(62)*dx(V3)*dz(dZ)
-  + GA(63)*dy(V3)*dx(dX) + GA(64)*dy(V3)*dy(dX) + GA(65)*dy(V3)*dz(dX)
-  + GA(66)*dy(V3)*dx(dY) + GA(67)*dy(V3)*dy(dY) + GA(68)*dy(V3)*dz(dY)
-  + GA(69)*dy(V3)*dx(dZ) + GA(70)*dy(V3)*dy(dZ) + GA(71)*dy(V3)*dz(dZ)
-  + GA(72)*dz(V3)*dx(dX) + GA(73)*dz(V3)*dy(dX) + GA(74)*dz(V3)*dz(dX)
-  + GA(75)*dz(V3)*dx(dY) + GA(76)*dz(V3)*dy(dY) + GA(77)*dz(V3)*dz(dY)
-  + GA(78)*dz(V3)*dx(dZ) + GA(79)*dz(V3)*dy(dZ) + GA(80)*dz(V3)*dz(dZ)
-  // K_up
-  + dp*cof11*dx(V1) + dp*cof12*dy(V1) + dp*cof13*dz(V1)
-  + dp*cof21*dx(V2) + dp*cof22*dy(V2) + dp*cof23*dz(V2)
-  + dp*cof31*dx(V3) + dp*cof32*dy(V3) + dp*cof33*dz(V3)
-  // K_pu
-  + V4*cof11*dx(dX) + V4*cof12*dy(dX) + V4*cof13*dz(dX)
-  + V4*cof21*dx(dY) + V4*cof22*dy(dY) + V4*cof23*dz(dY)
-  + V4*cof31*dx(dZ) + V4*cof32*dy(dZ) + V4*cof33*dz(dZ)
-  )
-  // BCs
+  KUU
+  + dp*cofW // Kup
+  + V4*cofG ) // Kpu
   + on(5,6, dX=0, dY=0, dZ=0);
 
+func real TensileForce(){return int2d(Th,6)(P33);}
+
 macro StaticSolve() {
-matrix J = StaJac(Vec,Vec, solver=sparsesolver);
-real[int] r = StaRes(0,Vec);
-r = -r;
-dX[] = J^-1 * r;
-X[] += dX[];
+cout << "In Newton Solve" << endl;
+for( int nr = 0; nr < StaNewtMax; nr++){
+  matrix J = StaJac(Vec,Vec, solver=sparsesolver);
+  real[int] r = StaRes(0,Vec);
+  r = -r;
+  dX[] = J^-1 * r;
+  X[] += dX[];
+  AbsErr = int3d(Th)(dX[]'*dX[]);
+  cout << AbsErr << endl;
+if( AbsErr < StaAbsErr ){
+  cout << "Newton converged in " << nr + 1 << " steps. Err: " << AbsErr << endl;
+  break;
+}
+}
+cout << "Exiting Newton Solve" << endl;
 } //
 
 macro StaticResidue() {
-Residue = int2d(Th, label=6)(P33) - TargetTensile;
+Residue = int2d(Th, 6)(P33) - TargetTensile;
 } //
 
 macro UpdateSecant() {
@@ -78,5 +47,5 @@ SearchInit = SearchHigh - ResidueHigh*(SearchHigh-SearchLow)/(ResidueHigh-Residu
 macro UpdateBisect() {
 if( Residue < 0 ){ SearchLow = SearchInit; }
 else{ SearchHigh = SearchInit; }
-SearchInit = (SearchHigh-SearchLow)/2;
+SearchInit = (SearchHigh+SearchLow)/2;
 } //
